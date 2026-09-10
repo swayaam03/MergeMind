@@ -12,3 +12,7 @@ dist/
 # IDE
 .vscode/
 .idea/
+
+
+.secrets/
+*.pem

@@ -1,0 +1,4 @@
+# Example gitattributes for MergeMind merge driver
+# *.py merge=mergemind
+# *.js merge=mergemind
+# *.java merge=mergemind

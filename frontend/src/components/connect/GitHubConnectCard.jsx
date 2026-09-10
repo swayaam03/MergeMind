@@ -12,20 +12,12 @@ function GithubIcon({ className = "w-6 h-6" }) {
 }
 
 export default function GitHubConnectCard() {
-  const [status, setStatus] = useState('idle'); // 'idle' | 'connecting' | 'connected_preview'
+  const [status, setStatus] = useState('idle'); // 'idle' | 'connecting'
 
-  const handleInitiateOAuth = () => {
-    // In Phase 2, this will trigger window.location.href = `${API_URL}/api/routes/auth/github/login`
+  const handleConnectGitHub = () => {
     setStatus('connecting');
-
-    // Simulate short network handoff for UI/UX demonstration
-    setTimeout(() => {
-      setStatus('connected_preview');
-    }, 1200);
-  };
-
-  const handleReset = () => {
-    setStatus('idle');
+    const backendUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:8000";
+    window.location.href = `${backendUrl}/api/github/install`;
   };
 
   return (
@@ -58,7 +50,7 @@ export default function GitHubConnectCard() {
       {status === 'idle' && (
         <div className="space-y-6">
           <button
-            onClick={handleInitiateOAuth}
+            onClick={handleConnectGitHub}
             className="w-full neu-glow-btn py-4 px-6 rounded-xl text-sm sm:text-base font-semibold text-white flex items-center justify-center gap-3 group"
           >
             <GithubIcon className="w-5 h-5 text-sky-200" />
@@ -79,7 +71,7 @@ export default function GitHubConnectCard() {
               Connecting to GitHub...
             </div>
             <p className="text-xs text-slate-400 mt-1 font-mono">
-              Initializing secure handoff flow
+              Redirecting to GitHub App installation
             </p>
           </div>
         </div>

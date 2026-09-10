@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { ArrowRight, Terminal } from 'lucide-react';
 
 export default function CTA() {
@@ -21,13 +22,13 @@ export default function CTA() {
             </p>
 
             <div className="flex flex-wrap items-center justify-center gap-4">
-              <a
-                href="#how-it-works"
+              <Link
+                to="/connect"
                 className="neu-glow-btn px-8 py-4 rounded-full text-base font-semibold text-white flex items-center gap-3 group"
               >
                 <span>Get Started</span>
                 <ArrowRight className="w-4 h-4 text-sky-300 transition-transform duration-200 group-hover:translate-x-1" />
-              </a>
+              </Link>
 
               <a
                 href="#review"

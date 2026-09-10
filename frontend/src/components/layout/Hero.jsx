@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import ParticleCloud from './ParticleCloud';
 import { ArrowRight, Play, Terminal, CheckCircle2, X } from 'lucide-react';
 
@@ -46,13 +47,13 @@ export default function Hero() {
 
             {/* CTA Buttons */}
             <div className="flex flex-wrap items-center gap-4 sm:gap-5 w-full sm:w-auto">
-              <a
-                href="#how-it-works"
+              <Link
+                to="/connect"
                 className="neu-glow-btn px-7 py-3.5 rounded-full text-base font-semibold text-white flex items-center justify-center gap-2.5 group w-full sm:w-auto"
               >
                 <span>Get Started</span>
                 <ArrowRight className="w-4 h-4 text-sky-300 transition-transform duration-200 group-hover:translate-x-1" />
-              </a>
+              </Link>
 
               <button
                 onClick={() => setShowDemoModal(true)}

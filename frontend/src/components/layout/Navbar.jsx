@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import Logo from '../common/Logo';
 import { ArrowRight, Menu, X } from 'lucide-react';
 
@@ -77,14 +78,13 @@ export default function Navbar({ activeSection, onNavigate }) {
 
         {/* Right: CTA Button */}
         <div className="hidden md:flex items-center gap-4">
-          <a
-            href="#how-it-works"
-            onClick={(e) => handleLinkClick(e, '#how-it-works')}
+          <Link
+            to="/connect"
             className="neu-button px-5 py-2 rounded-full text-sm font-medium text-slate-200 flex items-center gap-2 group"
           >
             <span>Get Started</span>
             <ArrowRight className="w-3.5 h-3.5 text-sky-400 transition-transform duration-200 group-hover:translate-x-0.5" />
-          </a>
+          </Link>
         </div>
 
         {/* Mobile menu trigger */}
@@ -119,14 +119,14 @@ export default function Navbar({ activeSection, onNavigate }) {
               );
             })}
             <div className="pt-3 mt-1 border-t border-white/[0.06]">
-              <a
-                href="#how-it-works"
-                onClick={(e) => handleLinkClick(e, '#how-it-works')}
+              <Link
+                to="/connect"
+                onClick={() => setMobileMenuOpen(false)}
                 className="w-full neu-glow-btn py-2.5 rounded-xl text-sm font-medium text-white flex items-center justify-center gap-2"
               >
                 <span>Get Started</span>
                 <ArrowRight className="w-3.5 h-3.5 text-sky-300" />
-              </a>
+              </Link>
             </div>
           </nav>
         </div>

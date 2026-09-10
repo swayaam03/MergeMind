@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import Logo from '../common/Logo';
 import { ArrowRight, Menu, X } from 'lucide-react';
@@ -6,6 +6,8 @@ import { ArrowRight, Menu, X } from 'lucide-react';
 export default function Navbar({ activeSection, onNavigate }) {
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const navRef = useRef(null);
+  const [indicatorStyle, setIndicatorStyle] = useState({ left: 0, top: 0, width: 0, height: 0, opacity: 0 });
 
   useEffect(() => {
     const handleScroll = () => {
@@ -22,6 +24,31 @@ export default function Navbar({ activeSection, onNavigate }) {
     { label: 'How It Works', href: '#how-it-works' },
     { label: 'Team', href: '#team' },
   ];
+
+  const updateIndicator = () => {
+    if (!navRef.current) return;
+    const activeEl = navRef.current.querySelector(`[data-nav-id="${activeSection}"]`);
+    if (activeEl) {
+      setIndicatorStyle({
+        left: activeEl.offsetLeft,
+        top: activeEl.offsetTop,
+        width: activeEl.offsetWidth,
+        height: activeEl.offsetHeight,
+        opacity: 1,
+      });
+    } else {
+      setIndicatorStyle((prev) => ({ ...prev, opacity: 0 }));
+    }
+  };
+
+  useEffect(() => {
+    updateIndicator();
+  }, [activeSection]);
+
+  useEffect(() => {
+    window.addEventListener('resize', updateIndicator);
+    return () => window.removeEventListener('resize', updateIndicator);
+  }, [activeSection]);
 
   const handleLinkClick = (e, href) => {
     e.preventDefault();
@@ -55,19 +82,36 @@ export default function Navbar({ activeSection, onNavigate }) {
           <Logo />
         </a>
 
-        {/* Center: Desktop Nav Links with subtle neumorphic capsule styling */}
-        <nav className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#0b0f17]/60 border border-white/[0.03] shadow-[inset_1px_1px_3px_rgba(255,255,255,0.02),_3px_3px_10px_rgba(0,0,0,0.4)]">
+        {/* Center: Desktop Nav Links with smooth sliding capsule indicator */}
+        <nav
+          ref={navRef}
+          className="relative hidden md:flex items-center gap-1.5 p-1.5 rounded-full bg-[#0b0f17]/75 border border-white/[0.03] shadow-[inset_1px_1px_3px_rgba(255,255,255,0.02),_3px_3px_10px_rgba(0,0,0,0.4)] backdrop-blur-sm"
+        >
+          {/* Smooth Sliding Active Pill Indicator */}
+          <span
+            className="absolute rounded-full neu-nav-active transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] pointer-events-none"
+            style={{
+              left: `${indicatorStyle.left}px`,
+              top: `${indicatorStyle.top}px`,
+              width: `${indicatorStyle.width}px`,
+              height: `${indicatorStyle.height}px`,
+              opacity: indicatorStyle.opacity,
+            }}
+          />
+
           {navItems.map((item) => {
-            const isActive = activeSection === item.href.replace('#', '');
+            const navId = item.href.replace('#', '');
+            const isActive = activeSection === navId;
             return (
               <a
                 key={item.label}
+                data-nav-id={navId}
                 href={item.href}
                 onClick={(e) => handleLinkClick(e, item.href)}
-                className={`px-4 py-1.5 text-sm font-medium rounded-full transition-all duration-200 ${
+                className={`relative z-10 px-4 py-1.5 text-sm font-medium rounded-full transition-colors duration-200 select-none ${
                   isActive
-                    ? 'neu-nav-active text-sky-100 font-semibold'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-white/[0.03]'
+                    ? 'text-sky-100 font-semibold'
+                    : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
                 {item.label}

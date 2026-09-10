@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Navbar from '../components/layout/Navbar';
 import Hero from '../components/layout/Hero';
 import Stats from '../components/layout/Stats';
@@ -11,11 +11,22 @@ import Footer from '../components/layout/Footer';
 
 export default function LandingPage() {
   const [activeSection, setActiveSection] = useState('home');
+  const isNavigatingRef = useRef(false);
+  const navTimeoutRef = useRef(null);
 
   useEffect(() => {
     const handleScroll = () => {
+      // Prevent scroll event from fighting with smooth navigation click
+      if (isNavigatingRef.current) return;
+
+      // Bottom of page detection (activates the final section 'team' reliably)
+      if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 70) {
+        setActiveSection('team');
+        return;
+      }
+
       const sections = ['home', 'about', 'features', 'how-it-works', 'review', 'team'];
-      const scrollPosition = window.scrollY + 180;
+      const scrollPosition = window.scrollY + 200;
 
       for (const sectionId of sections) {
         const el = document.getElementById(sectionId);
@@ -23,21 +34,41 @@ export default function LandingPage() {
           const top = el.offsetTop;
           const height = el.offsetHeight;
           if (scrollPosition >= top && scrollPosition < top + height) {
-            setActiveSection(sectionId);
+            // Map 'review' to 'how-it-works' so navbar active state doesn't blink or disappear in review section
+            const mappedSection = sectionId === 'review' ? 'how-it-works' : sectionId;
+            setActiveSection(mappedSection);
             break;
           }
         }
       }
     };
 
+    const handleUserInterrupt = () => {
+      isNavigatingRef.current = false;
+      if (navTimeoutRef.current) clearTimeout(navTimeoutRef.current);
+    };
+
     window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleScroll);
+    window.addEventListener('wheel', handleUserInterrupt, { passive: true });
+    window.addEventListener('touchmove', handleUserInterrupt, { passive: true });
+
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('wheel', handleUserInterrupt);
+      window.removeEventListener('touchmove', handleUserInterrupt);
+      if (navTimeoutRef.current) clearTimeout(navTimeoutRef.current);
+    };
   }, []);
 
   const handleNavigate = (href) => {
     const targetId = href.replace('#', '');
     const element = document.getElementById(targetId);
     if (element) {
+      isNavigatingRef.current = true;
+      if (navTimeoutRef.current) clearTimeout(navTimeoutRef.current);
+
+      setActiveSection(targetId);
+
       const navOffset = 80;
       const elementPosition = element.getBoundingClientRect().top;
       const offsetPosition = elementPosition + window.pageYOffset - navOffset;
@@ -46,7 +77,11 @@ export default function LandingPage() {
         top: offsetPosition,
         behavior: 'smooth'
       });
-      setActiveSection(targetId);
+
+      // Release navigation lock after smooth scroll finishes
+      navTimeoutRef.current = setTimeout(() => {
+        isNavigatingRef.current = false;
+      }, 850);
     }
   };
 

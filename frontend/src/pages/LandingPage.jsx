@@ -5,8 +5,6 @@ import Stats from '../components/layout/Stats';
 import Features from '../components/layout/Features';
 import HowItWorks from '../components/layout/HowItWorks';
 import ReviewPreview from '../components/review/ReviewPreview';
-import Team from '../components/layout/Team';
-import CTA from '../components/layout/CTA';
 import Footer from '../components/layout/Footer';
 
 export default function LandingPage() {
@@ -19,13 +17,13 @@ export default function LandingPage() {
       // Prevent scroll event from fighting with smooth navigation click
       if (isNavigatingRef.current) return;
 
-      // Bottom of page detection (activates the final section 'team' reliably)
+      // Bottom of page detection (activates the final section reliably)
       if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 70) {
-        setActiveSection('team');
+        setActiveSection('how-it-works');
         return;
       }
 
-      const sections = ['home', 'about', 'features', 'how-it-works', 'review', 'team'];
+      const sections = ['home', 'about', 'features', 'how-it-works', 'review'];
       const scrollPosition = window.scrollY + 200;
 
       for (const sectionId of sections) {
@@ -100,8 +98,6 @@ export default function LandingPage() {
         <Features />
         <HowItWorks />
         <ReviewPreview />
-        <Team />
-        <CTA />
       </main>
 
       {/* Footer */}

@@ -22,7 +22,6 @@ export default function Navbar({ activeSection, onNavigate }) {
     { label: 'About', href: '#about' },
     { label: 'Features', href: '#features' },
     { label: 'How It Works', href: '#how-it-works' },
-    { label: 'Team', href: '#team' },
   ];
 
   const updateIndicator = () => {

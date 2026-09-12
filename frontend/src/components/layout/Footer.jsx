@@ -1,6 +1,6 @@
 import React from 'react';
 import Logo from '../common/Logo';
-import { FileText, Users, Heart } from 'lucide-react';
+import { FileText } from 'lucide-react';
 
 function GithubIcon({ className = "w-4 h-4" }) {
   return (
@@ -44,14 +44,6 @@ export default function Footer() {
           >
             <FileText className="w-4 h-4" />
             <span>Documentation</span>
-          </a>
-
-          <a
-            href="#team"
-            className="flex items-center gap-2 hover:text-sky-300 transition-colors"
-          >
-            <Users className="w-4 h-4" />
-            <span>Team</span>
           </a>
         </div>
 

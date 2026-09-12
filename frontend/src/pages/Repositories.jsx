@@ -24,9 +24,8 @@ export default function Repositories() {
     setError(null);
 
     try {
-      const apiUrl = import.meta.env.VITE_BACKEND_URL
-        ? `${import.meta.env.VITE_BACKEND_URL}/api/github/repositories`
-        : '/api/github/repositories';
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
+      const apiUrl = `${backendUrl}/api/github/repositories`;
 
       const response = await fetch(apiUrl, {
         method: 'GET',

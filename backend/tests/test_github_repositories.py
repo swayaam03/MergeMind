@@ -244,3 +244,29 @@ def test_list_repositories_for_installation_helper():
     assert r["default_branch"] == "main"
     assert r["html_url"] == "https://github.com/owner/app-repo"
     assert "extra_internal_field" not in r
+
+
+@patch("app.api.routes.github.list_repositories_for_installation")
+def test_repositories_quoted_cookie_parsed_correctly(mock_list, client):
+    """GET /api/github/repositories handles quoted installation_id cookie e.g. installation_id=\"12345\"."""
+    mock_list.return_value = [{"id": 1, "name": "quoted-repo", "full_name": "org/quoted-repo", "private": False, "default_branch": "main", "html_url": "https://github.com/org/quoted-repo", "description": ""}]
+
+    response = client.get(
+        "/api/github/repositories",
+        headers={"Cookie": 'other_cookie=xyz; installation_id="998877"; tracking=true'},
+    )
+    assert response.status_code == 200
+    mock_list.assert_called_once_with(998877)
+
+
+@patch("app.api.routes.github.list_repositories_for_installation")
+def test_repositories_raw_cookie_header_regex_fallback(mock_list, client):
+    """GET /api/github/repositories extracts installation_id even with unparsed raw Cookie header string."""
+    mock_list.return_value = [{"id": 2, "name": "fallback-repo", "full_name": "org/fallback-repo", "private": False, "default_branch": "main", "html_url": "https://github.com/org/fallback-repo", "description": ""}]
+
+    response = client.get(
+        "/api/github/repositories",
+        headers={"Cookie": 'malformed=cookie[with]bracket; installation_id=554433'},
+    )
+    assert response.status_code == 200
+    mock_list.assert_called_once_with(554433)

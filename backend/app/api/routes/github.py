@@ -1,5 +1,6 @@
 import logging
-from fastapi import APIRouter, HTTPException, Query, Request, status
+import re
+from fastapi import APIRouter, Cookie, Header, HTTPException, Query, Request, status
 from fastapi.responses import RedirectResponse
 
 from app.core.config import settings
@@ -37,6 +38,7 @@ def install_github_app():
 
 @router.get("/setup")
 def setup_github_installation(
+    request: Request,
     installation_id: int | None = Query(
         default=None,
         description="GitHub App installation ID provided by GitHub after app installation.",
@@ -51,6 +53,15 @@ def setup_github_installation(
     Validates installation_id, authenticates with GitHub using the App JWT,
     verifies accessible repositories, and redirects the browser to /repositories.
     """
+    # Normalize 127.0.0.1 to localhost consistently to prevent cross-origin cookie loss
+    if request.url.hostname == "127.0.0.1":
+        query_str = f"?{request.url.query}" if request.url.query else ""
+        normalized_target = f"http://localhost:8000/api/github/setup{query_str}"
+        return RedirectResponse(
+            url=normalized_target,
+            status_code=status.HTTP_307_TEMPORARY_REDIRECT,
+        )
+
     if installation_id is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -125,38 +136,108 @@ def setup_github_installation(
 @router.get("/repositories")
 def get_github_repositories(
     request: Request,
-    installation_id: int | None = Query(
+    installation_id_cookie: str | None = Cookie(
         default=None,
+        alias="installation_id",
+        description="GitHub App installation ID stored in HttpOnly cookie",
+    ),
+    installation_id_query: int | None = Query(
+        default=None,
+        alias="installation_id",
         description="Optional installation ID override for testing or direct API clients",
+    ),
+    installation_id_header: str | None = Header(
+        default=None,
+        alias="x-installation-id",
+        description="Optional installation ID provided via HTTP header",
     ),
 ):
     """
     Retrieve repositories accessible to the currently authenticated GitHub App installation.
 
-    Context Resolution:
-    1. Query param: ?installation_id=<ID> (explicit override / direct testing)
-    2. HTTP header: X-Installation-Id (programmatic API clients)
-    3. HTTP-only cookie: installation_id (established during /api/github/setup redirect)
+    Context Resolution Hierarchy:
+    1. HTTP-only cookie: installation_id (via FastAPI Cookie dependency)
+    2. Request cookies map: request.cookies['installation_id']
+    3. Raw Cookie header regex parse (fallback against adjacent malformed cookies)
+    4. HTTP header: X-Installation-Id (programmatic API clients)
+    5. Query param: ?installation_id=<ID> (explicit override / direct testing)
 
     Never exposes or returns access tokens, JWTs, private keys, or client secrets.
     """
-    target_installation_id: int | None = installation_id
+    target_installation_id: int | None = None
+    selected_source: str | None = None
 
+    # 1. FastAPI Cookie dependency
+    if installation_id_cookie:
+        try:
+            cleaned_val = str(installation_id_cookie).strip().strip('"').strip("'")
+            val = int(cleaned_val)
+            if val > 0:
+                target_installation_id = val
+                selected_source = "cookie (fastapi dependency)"
+        except ValueError:
+            pass
+
+    # 2. request.cookies dictionary fallback
     if target_installation_id is None:
         cookie_val = request.cookies.get("installation_id")
         if cookie_val:
             try:
-                target_installation_id = int(cookie_val)
+                cleaned_val = str(cookie_val).strip().strip('"').strip("'")
+                val = int(cleaned_val)
+                if val > 0:
+                    target_installation_id = val
+                    selected_source = "cookie (request.cookies)"
             except ValueError:
-                target_installation_id = None
+                pass
 
+    # 3. Raw Cookie header regex parse fallback (handles quotes, semicolons, or foreign malformed cookies)
     if target_installation_id is None:
-        header_val = request.headers.get("x-installation-id")
-        if header_val:
-            try:
-                target_installation_id = int(header_val)
-            except ValueError:
-                target_installation_id = None
+        raw_cookie_header = request.headers.get("cookie", "")
+        if "installation_id" in raw_cookie_header:
+            match = re.search(r'(?:^|;\s*)installation_id=([^;]+)', raw_cookie_header)
+            if match:
+                try:
+                    cleaned_val = match.group(1).strip().strip('"').strip("'")
+                    val = int(cleaned_val)
+                    if val > 0:
+                        target_installation_id = val
+                        selected_source = "cookie (raw header regex)"
+                except ValueError:
+                    pass
+
+    # 4. HTTP header (x-installation-id)
+    if target_installation_id is None and installation_id_header:
+        try:
+            val = int(str(installation_id_header).strip())
+            if val > 0:
+                target_installation_id = val
+                selected_source = "header (x-installation-id)"
+        except ValueError:
+            pass
+
+    # 5. Query parameter (?installation_id=...)
+    if target_installation_id is None and installation_id_query:
+        if installation_id_query > 0:
+            target_installation_id = installation_id_query
+            selected_source = "query parameter"
+
+    # Temporary safe debugging/logging: reports ONLY boolean existence and selected source
+    cookie_present = bool(
+        installation_id_cookie
+        or request.cookies.get("installation_id")
+        or ("installation_id=" in request.headers.get("cookie", ""))
+    )
+    header_present = bool(installation_id_header or request.headers.get("x-installation-id"))
+    query_present = bool(installation_id_query)
+
+    logger.info(
+        "GET /api/github/repositories context: cookie_exists=%s, header_exists=%s, query_exists=%s, selected_source=%s",
+        cookie_present,
+        header_present,
+        query_present,
+        selected_source,
+    )
 
     if target_installation_id is None or target_installation_id <= 0:
         raise HTTPException(

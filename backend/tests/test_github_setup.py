@@ -56,6 +56,15 @@ def test_setup_success_redirect(mock_verify, client):
     mock_verify.assert_called_once_with(12345678)
 
 
+def test_setup_normalizes_127_0_0_1_to_localhost(client):
+    """GET http://127.0.0.1:8000/api/github/setup redirects to http://localhost:8000/api/github/setup."""
+    response = client.get(
+        "http://127.0.0.1:8000/api/github/setup?installation_id=12345678"
+    )
+    assert response.status_code == 307
+    assert response.headers["location"] == "http://localhost:8000/api/github/setup?installation_id=12345678"
+
+
 @patch("app.api.routes.github.verify_installation")
 def test_setup_config_error(mock_verify, client):
     """GET /api/github/setup handles GitHubConfigError safely with 500 without leaking secrets."""

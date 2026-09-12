@@ -1,5 +1,5 @@
 import logging
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, Request, status
 from fastapi.responses import RedirectResponse
 
 from app.core.config import settings
@@ -7,6 +7,7 @@ from app.git.github import (
     GitHubAPIError,
     GitHubAuthError,
     GitHubConfigError,
+    list_repositories_for_installation,
     verify_installation,
 )
 
@@ -100,11 +101,98 @@ def setup_github_installation(
             detail="Internal server error during installation setup.",
         ) from exc
 
-    # Redirect to frontend repositories placeholder route
+    # Redirect to frontend repositories route and establish installation context via HttpOnly cookie
     frontend_base = settings.FRONTEND_URL.rstrip("/")
     redirect_url = f"{frontend_base}/repositories"
 
-    return RedirectResponse(
+    response = RedirectResponse(
         url=redirect_url,
         status_code=status.HTTP_307_TEMPORARY_REDIRECT,
     )
+    # Secure HTTP-only cookie preserving installation context without exposing tokens
+    response.set_cookie(
+        key="installation_id",
+        value=str(installation_id),
+        httponly=True,
+        samesite="lax",
+        secure=False,  # Allow local HTTP development
+        max_age=86400 * 7,  # 7 days
+        path="/",
+    )
+    return response
+
+
+@router.get("/repositories")
+def get_github_repositories(
+    request: Request,
+    installation_id: int | None = Query(
+        default=None,
+        description="Optional installation ID override for testing or direct API clients",
+    ),
+):
+    """
+    Retrieve repositories accessible to the currently authenticated GitHub App installation.
+
+    Context Resolution:
+    1. Query param: ?installation_id=<ID> (explicit override / direct testing)
+    2. HTTP header: X-Installation-Id (programmatic API clients)
+    3. HTTP-only cookie: installation_id (established during /api/github/setup redirect)
+
+    Never exposes or returns access tokens, JWTs, private keys, or client secrets.
+    """
+    target_installation_id: int | None = installation_id
+
+    if target_installation_id is None:
+        cookie_val = request.cookies.get("installation_id")
+        if cookie_val:
+            try:
+                target_installation_id = int(cookie_val)
+            except ValueError:
+                target_installation_id = None
+
+    if target_installation_id is None:
+        header_val = request.headers.get("x-installation-id")
+        if header_val:
+            try:
+                target_installation_id = int(header_val)
+            except ValueError:
+                target_installation_id = None
+
+    if target_installation_id is None or target_installation_id <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing installation context. Please connect your GitHub account via /api/github/install first.",
+        )
+
+    try:
+        repos = list_repositories_for_installation(target_installation_id)
+        return {"repositories": repos}
+    except GitHubConfigError as exc:
+        logger.error("GitHub App configuration error: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="GitHub App configuration is missing or invalid.",
+        ) from exc
+    except GitHubAuthError as exc:
+        logger.error("GitHub App authentication failed for installation %d: %s", target_installation_id, exc)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="GitHub App authentication failed.",
+        ) from exc
+    except GitHubAPIError as exc:
+        logger.error("GitHub API error for installation %d: %s", target_installation_id, exc)
+        if exc.status_code == 404:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="GitHub App installation not found.",
+            ) from exc
+        raise HTTPException(
+            status_code=exc.status_code if 400 <= exc.status_code < 600 else status.HTTP_502_BAD_GATEWAY,
+            detail="GitHub API error while listing repositories.",
+        ) from exc
+    except Exception as exc:
+        logger.exception("Unexpected error listing repositories for installation %d", target_installation_id)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error while retrieving repositories.",
+        ) from exc

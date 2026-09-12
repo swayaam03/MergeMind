@@ -27,6 +27,10 @@ class GitHubConfigError(Exception):
 class GitHubAuthError(Exception):
     """Raised when GitHub App authentication or token creation fails."""
 
+    def __init__(self, message: str, status_code: int = 401) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+
 
 class GitHubAPIError(Exception):
     """Raised when a GitHub API request returns an error."""
@@ -225,3 +229,36 @@ def verify_installation(
     )
 
     return repo_names
+
+
+def list_repositories_for_installation(
+    installation_id: int,
+    client: httpx.Client | None = None,
+) -> list[dict[str, Any]]:
+    """
+    Fetch and format safe repository metadata for a given GitHub App installation.
+
+    Freshly generates a JWT and obtains a short-lived installation access token.
+    Never exposes or persists the installation access token.
+    """
+    installation_token = get_installation_access_token(installation_id, client=client)
+    raw_repos = get_installation_repositories(installation_token, client=client)
+
+    safe_repos = []
+    for repo in raw_repos:
+        safe_repos.append({
+            "id": repo.get("id"),
+            "name": repo.get("name", ""),
+            "full_name": repo.get("full_name", ""),
+            "private": bool(repo.get("private", False)),
+            "default_branch": repo.get("default_branch", "main"),
+            "html_url": repo.get("html_url", ""),
+            "description": repo.get("description") or "",
+        })
+
+    logger.info(
+        "Retrieved %d repositories for installation_id=%d",
+        len(safe_repos),
+        installation_id,
+    )
+    return safe_repos

@@ -17,6 +17,14 @@ import {
   Sparkles,
   Info,
   FileCode,
+  FolderTree,
+  BookOpen,
+  Cpu,
+  FileText,
+  ChevronDown,
+  ChevronUp,
+  Layers,
+  Boxes,
 } from 'lucide-react';
 
 export default function PullRequest() {
@@ -30,12 +38,67 @@ export default function PullRequest() {
   const [conflictData, setConflictData] = useState(null);
   const [analysisError, setAnalysisError] = useState(null);
 
+  // Repository Context state
+  const [repositoryContext, setRepositoryContext] = useState(null);
+  const [loadingContext, setLoadingContext] = useState(false);
+  const [contextError, setContextError] = useState(null);
+  const [contextOpen, setContextOpen] = useState(true);
+  const [readmeOpen, setReadmeOpen] = useState(false);
+  const [treeOpen, setTreeOpen] = useState(false);
+  const [filePreviewsOpen, setFilePreviewsOpen] = useState({});
+
+  const toggleFilePreview = (path) => {
+    setFilePreviewsOpen((prev) => ({
+      ...prev,
+      [path]: !prev[path],
+    }));
+  };
+
+  const fetchRepositoryContext = async (conflictingFiles = []) => {
+    setLoadingContext(true);
+    setContextError(null);
+
+    try {
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
+      let apiUrl = `${backendUrl}/api/github/repositories/${owner}/${repo}/pulls/${pullNumber}/context`;
+      if (conflictingFiles && conflictingFiles.length > 0) {
+        const query = conflictingFiles
+          .map((f) => `conflicting_files=${encodeURIComponent(f)}`)
+          .join('&');
+        apiUrl += `?${query}`;
+      }
+
+      const response = await fetch(apiUrl, {
+        method: 'GET',
+        headers: {
+          Accept: 'application/json',
+        },
+        credentials: 'include',
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.detail || 'Unable to retrieve repository context.');
+      }
+
+      setRepositoryContext(data);
+    } catch (err) {
+      console.error('Error fetching repository context:', err);
+      setContextError(err.message || 'Failed to extract repository context.');
+    } finally {
+      setLoadingContext(false);
+    }
+  };
+
   const fetchPullRequest = async () => {
     setLoading(true);
     setError(null);
     setErrorStatus(null);
     setConflictData(null);
     setAnalysisError(null);
+    setRepositoryContext(null);
+    setContextError(null);
 
     try {
       const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
@@ -103,6 +166,8 @@ export default function PullRequest() {
       }
 
       setConflictData(data);
+      // Automatically trigger repository context extraction with discovered conflicting files
+      fetchRepositoryContext(data.conflicting_files || []);
     } catch (err) {
       console.error('Error analyzing conflicts:', err);
       setAnalysisError(err.message || 'Failed to analyze conflicts.');
@@ -545,6 +610,307 @@ export default function PullRequest() {
                             <span>Refresh</span>
                           </button>
                         </div>
+                      </div>
+                    )}
+
+                    {/* Repository Context Card (Phase 4 Task 1) */}
+                    {(conflictData || repositoryContext || loadingContext) && (
+                      <div className="neu-panel rounded-2xl p-6 sm:p-7 border border-white/[0.08] shadow-[0_15px_40px_rgba(0,0,0,0.5)] space-y-6">
+                        {/* Header with expand toggle */}
+                        <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-white/[0.06]">
+                          <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-xl bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400">
+                              <FolderTree className="w-5 h-5" />
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <h3 className="text-base sm:text-lg font-bold text-white">
+                                  Repository Context
+                                </h3>
+                                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-sky-500/10 text-sky-300 border border-sky-500/20">
+                                  deterministic
+                                </span>
+                              </div>
+                              <p className="text-xs text-slate-400 mt-0.5">
+                                Project-level metadata, dependencies, tree structure & neighbor files for LLM Merge Agent
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => fetchRepositoryContext(conflictData?.conflicting_files || [])}
+                              disabled={loadingContext}
+                              className="neu-button px-3 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:text-white flex items-center gap-1.5 transition-colors disabled:opacity-50"
+                              title="Re-extract repository context"
+                            >
+                              <RefreshCw className={`w-3.5 h-3.5 text-sky-400 ${loadingContext ? 'animate-spin' : ''}`} />
+                              <span className="hidden sm:inline">Refresh Context</span>
+                            </button>
+
+                            <button
+                              onClick={() => setContextOpen(!contextOpen)}
+                              className="neu-button px-2.5 py-1.5 rounded-lg text-xs text-slate-400 hover:text-white transition-colors"
+                              title={contextOpen ? 'Collapse context' : 'Expand context'}
+                            >
+                              {contextOpen ? (
+                                <ChevronUp className="w-4 h-4" />
+                              ) : (
+                                <ChevronDown className="w-4 h-4" />
+                              )}
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Loading State */}
+                        {loadingContext && (
+                          <div className="p-8 rounded-xl neu-recessed border border-white/[0.04] text-center space-y-3">
+                            <Loader2 className="w-6 h-6 text-sky-400 animate-spin mx-auto" />
+                            <p className="text-xs text-slate-300 font-medium">
+                              Extracting repository structure, README, technologies, and neighbor files...
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Error State */}
+                        {!loadingContext && contextError && (
+                          <div className="p-4 rounded-xl bg-rose-950/30 border border-rose-500/30 flex items-start gap-3">
+                            <AlertCircle className="w-4 h-4 text-rose-400 flex-shrink-0 mt-0.5" />
+                            <div className="flex-1">
+                              <p className="text-xs font-semibold text-rose-300">
+                                Repository context extraction failed
+                              </p>
+                              <p className="text-xs text-rose-400/90 leading-relaxed mt-0.5">
+                                {contextError}
+                              </p>
+                            </div>
+                            <button
+                              onClick={() => fetchRepositoryContext(conflictData?.conflicting_files || [])}
+                              className="text-xs text-rose-300 hover:text-white underline"
+                            >
+                              Retry
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Context Content (Expanded) */}
+                        {!loadingContext && !contextError && repositoryContext && contextOpen && (
+                          <div className="space-y-6">
+
+                            {/* Section 1: Detected Technologies & Frameworks */}
+                            <div>
+                              <div className="flex items-center gap-2 mb-3">
+                                <Cpu className="w-4 h-4 text-indigo-400" />
+                                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-300 font-mono">
+                                  Detected Technologies & Frameworks
+                                </h4>
+                                <span className="text-[11px] font-mono text-slate-500">
+                                  ({repositoryContext.detected_technologies?.length || 0})
+                                </span>
+                              </div>
+
+                              {repositoryContext.detected_technologies && repositoryContext.detected_technologies.length > 0 ? (
+                                <div className="flex flex-wrap gap-2">
+                                  {repositoryContext.detected_technologies.map((tech, idx) => {
+                                    const catColors = {
+                                      framework: 'bg-indigo-500/10 text-indigo-300 border-indigo-500/25',
+                                      language: 'bg-sky-500/10 text-sky-300 border-sky-500/25',
+                                      testing: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/25',
+                                      runtime: 'bg-purple-500/10 text-purple-300 border-purple-500/25',
+                                      package_manager: 'bg-slate-500/10 text-slate-300 border-slate-500/25',
+                                      build: 'bg-amber-500/10 text-amber-300 border-amber-500/25',
+                                    };
+                                    const badgeClass = catColors[tech.category] || 'bg-sky-500/10 text-sky-300 border-sky-500/25';
+
+                                    return (
+                                      <div
+                                        key={idx}
+                                        className="p-2.5 rounded-xl neu-recessed border border-white/[0.04] flex items-center gap-2 text-xs"
+                                      >
+                                        <span className="font-bold text-white font-mono">{tech.name}</span>
+                                        {tech.version && (
+                                          <span className="font-mono text-[10px] text-slate-400 px-1.5 py-0.5 rounded bg-black/40">
+                                            {tech.version}
+                                          </span>
+                                        )}
+                                        <span className={`text-[10px] font-mono uppercase px-1.5 py-0.5 rounded border ${badgeClass}`}>
+                                          {tech.category}
+                                        </span>
+                                        <span className="text-[10px] text-slate-500 font-mono hidden sm:inline">
+                                          via {tech.detected_from}
+                                        </span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              ) : (
+                                <p className="text-xs text-slate-500 italic">No standard frameworks or manifests identified.</p>
+                              )}
+                            </div>
+
+                            {/* Section 2: GitHub Languages breakdown */}
+                            {repositoryContext.languages && Object.keys(repositoryContext.languages).length > 0 && (
+                              <div>
+                                <div className="flex items-center gap-2 mb-2">
+                                  <Layers className="w-4 h-4 text-sky-400" />
+                                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-300 font-mono">
+                                    Repository Languages
+                                  </h4>
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                  {Object.entries(repositoryContext.languages).map(([lang, bytes]) => (
+                                    <div
+                                      key={lang}
+                                      className="px-2.5 py-1 rounded-lg bg-white/[0.03] border border-white/[0.04] text-xs font-mono flex items-center gap-2 text-slate-300"
+                                    >
+                                      <span className="w-2 h-2 rounded-full bg-sky-400" />
+                                      <span className="font-medium text-white">{lang}</span>
+                                      <span className="text-[11px] text-slate-500">
+                                        {(bytes / 1024).toFixed(1)} KB
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Section 3: README Preview (Collapsible) */}
+                            {repositoryContext.readme_preview && (
+                              <div className="rounded-xl neu-recessed border border-white/[0.04] overflow-hidden">
+                                <button
+                                  type="button"
+                                  onClick={() => setReadmeOpen(!readmeOpen)}
+                                  className="w-full p-3.5 flex items-center justify-between text-left hover:bg-white/[0.02] transition-colors"
+                                >
+                                  <div className="flex items-center gap-2.5 text-xs font-mono">
+                                    <BookOpen className="w-4 h-4 text-sky-400" />
+                                    <span className="font-semibold text-white">README.md Preview</span>
+                                    <span className="text-[10px] text-slate-500">
+                                      ({repositoryContext.readme_preview.length} characters)
+                                    </span>
+                                  </div>
+                                  <span className="text-xs text-slate-400 flex items-center gap-1 font-mono">
+                                    {readmeOpen ? 'Hide' : 'View'}
+                                    {readmeOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                                  </span>
+                                </button>
+
+                                {readmeOpen && (
+                                  <div className="p-4 border-t border-white/[0.04] bg-slate-950/60 max-h-60 overflow-y-auto font-mono text-xs text-slate-300 whitespace-pre-wrap leading-relaxed">
+                                    {repositoryContext.readme_preview}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Section 4: Directory Structure (Collapsible) */}
+                            {repositoryContext.directory_structure && (
+                              <div className="rounded-xl neu-recessed border border-white/[0.04] overflow-hidden">
+                                <button
+                                  type="button"
+                                  onClick={() => setTreeOpen(!treeOpen)}
+                                  className="w-full p-3.5 flex items-center justify-between text-left hover:bg-white/[0.02] transition-colors"
+                                >
+                                  <div className="flex items-center gap-2.5 text-xs font-mono">
+                                    <FolderTree className="w-4 h-4 text-sky-400" />
+                                    <span className="font-semibold text-white">Directory Structure</span>
+                                    <span className="text-[10px] text-slate-500">
+                                      ({repositoryContext.directory_structure.length} indexed files
+                                      {repositoryContext.tree_truncated ? ' • truncated' : ''})
+                                    </span>
+                                  </div>
+                                  <span className="text-xs text-slate-400 flex items-center gap-1 font-mono">
+                                    {treeOpen ? 'Hide' : 'View'}
+                                    {treeOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                                  </span>
+                                </button>
+
+                                {treeOpen && (
+                                  <div className="p-4 border-t border-white/[0.04] bg-slate-950/60 max-h-64 overflow-y-auto font-mono text-xs text-slate-300 space-y-1">
+                                    {repositoryContext.directory_structure.map((fpath, idx) => (
+                                      <div key={idx} className="flex items-center gap-2 py-0.5 hover:text-sky-300 transition-colors">
+                                        <span className="text-slate-600 select-none">#</span>
+                                        <span>{fpath}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Section 5: Relevant Neighbor Files */}
+                            <div>
+                              <div className="flex items-center gap-2 mb-3">
+                                <FileCode className="w-4 h-4 text-emerald-400" />
+                                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-300 font-mono">
+                                  Relevant Neighbor & Test Files
+                                </h4>
+                                <span className="text-[11px] font-mono text-slate-500">
+                                  ({repositoryContext.relevant_files?.length || 0})
+                                </span>
+                              </div>
+
+                              {repositoryContext.relevant_files && repositoryContext.relevant_files.length > 0 ? (
+                                <div className="space-y-3">
+                                  {repositoryContext.relevant_files.map((file) => {
+                                    const isPreviewOpen = Boolean(filePreviewsOpen[file.path]);
+                                    return (
+                                      <div
+                                        key={file.path}
+                                        className="rounded-xl neu-recessed border border-white/[0.04] overflow-hidden"
+                                      >
+                                        <div className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                          <div className="flex items-center gap-2.5 min-w-0">
+                                            <FileText className="w-4 h-4 text-sky-400 flex-shrink-0" />
+                                            <span className="font-mono text-xs font-semibold text-white truncate">
+                                              {file.path}
+                                            </span>
+                                            {file.reason && (
+                                              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 flex-shrink-0">
+                                                {file.reason}
+                                              </span>
+                                            )}
+                                          </div>
+
+                                          <div className="flex items-center gap-3 self-end sm:self-center">
+                                            <span className="text-[10px] font-mono text-slate-500">
+                                              {file.size} bytes {file.truncated ? '(capped)' : ''}
+                                            </span>
+                                            <button
+                                              type="button"
+                                              onClick={() => toggleFilePreview(file.path)}
+                                              className="text-xs font-mono text-sky-400 hover:text-sky-300 flex items-center gap-1 cursor-pointer"
+                                            >
+                                              {isPreviewOpen ? 'Hide code' : 'Preview code'}
+                                              {isPreviewOpen ? (
+                                                <ChevronUp className="w-3.5 h-3.5" />
+                                              ) : (
+                                                <ChevronDown className="w-3.5 h-3.5" />
+                                              )}
+                                            </button>
+                                          </div>
+                                        </div>
+
+                                        {isPreviewOpen && (
+                                          <div className="border-t border-white/[0.04] bg-slate-950/70 p-4 max-h-60 overflow-y-auto">
+                                            <pre className="font-mono text-xs text-slate-300 whitespace-pre-wrap leading-relaxed">
+                                              {file.content}
+                                            </pre>
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              ) : (
+                                <p className="text-xs text-slate-500 italic">
+                                  No additional neighbor or unit test files required.
+                                </p>
+                              )}
+                            </div>
+
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>

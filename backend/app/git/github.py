@@ -262,3 +262,250 @@ def list_repositories_for_installation(
         installation_id,
     )
     return safe_repos
+
+
+def get_repository_pull_requests(
+    owner: str,
+    repo: str,
+    installation_token: str,
+    client: httpx.Client | None = None,
+) -> list[dict[str, Any]]:
+    """
+    Retrieve open pull requests for a given repository using GitHub REST API.
+
+    GET /repos/{owner}/{repo}/pulls?state=open
+    """
+    url = f"{GITHUB_API_BASE}/repos/{owner}/{repo}/pulls"
+    params = {"state": "open"}
+    headers = {
+        "Authorization": f"Bearer {installation_token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": GITHUB_API_VERSION,
+    }
+
+    owns_client = False
+    if client is None:
+        client = httpx.Client(timeout=10.0)
+        owns_client = True
+
+    try:
+        response = client.get(url, params=params, headers=headers)
+    except httpx.RequestError as exc:
+        raise GitHubAPIError("Failed to reach GitHub API.", status_code=502) from exc
+    finally:
+        if owns_client:
+            client.close()
+
+    if response.status_code == 200:
+        return response.json()
+
+    if response.status_code == 404:
+        raise GitHubAPIError(f"Repository {owner}/{repo} not found on GitHub.", status_code=404)
+    if response.status_code in (401, 403):
+        raise GitHubAuthError("GitHub App authentication failed or repository access denied.", status_code=response.status_code)
+
+    raise GitHubAPIError(
+        f"GitHub API error fetching pull requests for {owner}/{repo}.",
+        status_code=response.status_code,
+    )
+
+
+def list_pull_requests_for_repo(
+    installation_id: int,
+    owner: str,
+    repo: str,
+    client: httpx.Client | None = None,
+) -> dict[str, Any]:
+    """
+    Validate repository accessibility, fetch open pull requests, and format safe metadata.
+
+    Ensures the requested repository is part of the accessible repositories for the installation.
+    Never exposes tokens, JWTs, or private keys.
+    """
+    installation_token = get_installation_access_token(installation_id, client=client)
+
+    # 1. Validate repository accessibility
+    accessible_repos = get_installation_repositories(installation_token, client=client)
+    target_full_name = f"{owner}/{repo}".lower()
+
+    is_accessible = any(
+        str(r.get("full_name", "")).lower() == target_full_name
+        for r in accessible_repos
+    )
+
+    if not is_accessible:
+        raise GitHubAPIError(
+            f"Repository '{owner}/{repo}' is not accessible to this installation.",
+            status_code=403,
+        )
+
+    # 2. Fetch open pull requests
+    raw_prs = get_repository_pull_requests(owner, repo, installation_token, client=client)
+
+    safe_prs = []
+    for pr in raw_prs:
+        safe_prs.append({
+            "number": pr.get("number"),
+            "title": pr.get("title", ""),
+            "state": pr.get("state", "open"),
+            "html_url": pr.get("html_url", ""),
+            "user": {
+                "login": pr.get("user", {}).get("login", "") if isinstance(pr.get("user"), dict) else "",
+            },
+            "head": {
+                "ref": pr.get("head", {}).get("ref", "") if isinstance(pr.get("head"), dict) else "",
+            },
+            "base": {
+                "ref": pr.get("base", {}).get("ref", "") if isinstance(pr.get("base"), dict) else "",
+            },
+            "draft": bool(pr.get("draft", False)),
+        })
+
+    logger.info(
+        "Retrieved %d open pull requests for %s/%s (installation_id=%d)",
+        len(safe_prs),
+        owner,
+        repo,
+        installation_id,
+    )
+
+    return {
+        "repository": {
+            "owner": owner,
+            "name": repo,
+            "full_name": f"{owner}/{repo}",
+        },
+        "pull_requests": safe_prs,
+    }
+
+
+def get_pull_request_detail(
+    owner: str,
+    repo: str,
+    pull_number: int,
+    installation_token: str,
+    client: httpx.Client | None = None,
+) -> dict[str, Any]:
+    """
+    Retrieve details for a single pull request from GitHub REST API.
+
+    GET /repos/{owner}/{repo}/pulls/{pull_number}
+    """
+    url = f"{GITHUB_API_BASE}/repos/{owner}/{repo}/pulls/{pull_number}"
+    headers = {
+        "Authorization": f"Bearer {installation_token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": GITHUB_API_VERSION,
+    }
+
+    owns_client = False
+    if client is None:
+        client = httpx.Client(timeout=10.0)
+        owns_client = True
+
+    try:
+        response = client.get(url, headers=headers)
+    except httpx.RequestError as exc:
+        raise GitHubAPIError("Failed to reach GitHub API.", status_code=502) from exc
+    finally:
+        if owns_client:
+            client.close()
+
+    if response.status_code == 200:
+        return response.json()
+
+    if response.status_code == 404:
+        raise GitHubAPIError(
+            f"Pull request #{pull_number} not found in {owner}/{repo}.",
+            status_code=404,
+        )
+    if response.status_code in (401, 403):
+        raise GitHubAuthError(
+            "GitHub App authentication failed or pull request access denied.",
+            status_code=response.status_code,
+        )
+
+    raise GitHubAPIError(
+        f"GitHub API error fetching pull request #{pull_number} for {owner}/{repo}.",
+        status_code=response.status_code,
+    )
+
+
+def get_pull_request_for_repo(
+    installation_id: int,
+    owner: str,
+    repo: str,
+    pull_number: int,
+    client: httpx.Client | None = None,
+) -> dict[str, Any]:
+    """
+    Validate repository accessibility, retrieve single PR details, and extract mergeability.
+
+    Ensures the requested repository is part of the accessible repositories for the installation.
+    Never exposes tokens, JWTs, or private keys.
+    """
+    installation_token = get_installation_access_token(installation_id, client=client)
+
+    # 1. Validate repository accessibility
+    accessible_repos = get_installation_repositories(installation_token, client=client)
+    target_full_name = f"{owner}/{repo}".lower()
+
+    is_accessible = any(
+        str(r.get("full_name", "")).lower() == target_full_name
+        for r in accessible_repos
+    )
+
+    if not is_accessible:
+        raise GitHubAPIError(
+            f"Repository '{owner}/{repo}' is not accessible to this installation.",
+            status_code=403,
+        )
+
+    # 2. Fetch pull request detail
+    raw_pr = get_pull_request_detail(
+        owner=owner,
+        repo=repo,
+        pull_number=pull_number,
+        installation_token=installation_token,
+        client=client,
+    )
+
+    user_obj = raw_pr.get("user") or {}
+    head_obj = raw_pr.get("head") or {}
+    base_obj = raw_pr.get("base") or {}
+
+    author = user_obj.get("login", "") if isinstance(user_obj, dict) else ""
+    head_branch = head_obj.get("ref", "") if isinstance(head_obj, dict) else ""
+    base_branch = base_obj.get("ref", "") if isinstance(base_obj, dict) else ""
+
+    safe_pr = {
+        "number": raw_pr.get("number", pull_number),
+        "title": raw_pr.get("title", ""),
+        "state": raw_pr.get("state", "open"),
+        "draft": bool(raw_pr.get("draft", False)),
+        "author": author,
+        "head_branch": head_branch,
+        "base_branch": base_branch,
+        "html_url": raw_pr.get("html_url", ""),
+        "mergeable": raw_pr.get("mergeable"),  # True, False, or None
+        "mergeable_state": raw_pr.get("mergeable_state"),
+    }
+
+    logger.info(
+        "Retrieved PR #%d for %s/%s (mergeable=%s, mergeable_state=%s)",
+        pull_number,
+        owner,
+        repo,
+        safe_pr["mergeable"],
+        safe_pr["mergeable_state"],
+    )
+
+    return {
+        "repository": {
+            "owner": owner,
+            "name": repo,
+            "full_name": f"{owner}/{repo}",
+        },
+        "pull_request": safe_pr,
+    }
+

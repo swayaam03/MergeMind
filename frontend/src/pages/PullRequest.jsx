@@ -16,6 +16,7 @@ import {
   ShieldAlert,
   Sparkles,
   Info,
+  FileCode,
 } from 'lucide-react';
 
 export default function PullRequest() {
@@ -25,11 +26,16 @@ export default function PullRequest() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [errorStatus, setErrorStatus] = useState(null);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [conflictData, setConflictData] = useState(null);
+  const [analysisError, setAnalysisError] = useState(null);
 
   const fetchPullRequest = async () => {
     setLoading(true);
     setError(null);
     setErrorStatus(null);
+    setConflictData(null);
+    setAnalysisError(null);
 
     try {
       const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
@@ -71,6 +77,37 @@ export default function PullRequest() {
       setError(err.message || 'Unable to check pull request.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleAnalyzeConflicts = async () => {
+    setAnalyzing(true);
+    setAnalysisError(null);
+
+    try {
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
+      const apiUrl = `${backendUrl}/api/github/repositories/${owner}/${repo}/pulls/${pullNumber}/conflicts`;
+
+      const response = await fetch(apiUrl, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+        },
+        credentials: 'include',
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.detail || 'Unable to analyze conflicts.');
+      }
+
+      setConflictData(data);
+    } catch (err) {
+      console.error('Error analyzing conflicts:', err);
+      setAnalysisError(err.message || 'Failed to analyze conflicts.');
+    } finally {
+      setAnalyzing(false);
     }
   };
 
@@ -286,46 +323,161 @@ export default function PullRequest() {
 
                 {/* Case 2: Mergeable === false (Conflict Detected) */}
                 {pullRequest.mergeable === false && (
-                  <div className="rounded-2xl p-6 sm:p-7 neu-recessed border border-amber-500/30 bg-amber-950/10 relative overflow-hidden">
-                    <div className="absolute top-0 right-0 w-48 h-48 bg-amber-500/5 rounded-full blur-2xl pointer-events-none" />
+                  <div className="space-y-4">
+                    {/* Conflict Notice Card */}
+                    <div className="rounded-2xl p-6 sm:p-7 neu-recessed border border-amber-500/30 bg-amber-950/10 relative overflow-hidden">
+                      <div className="absolute top-0 right-0 w-48 h-48 bg-amber-500/5 rounded-full blur-2xl pointer-events-none" />
 
-                    <div className="flex items-start gap-4">
-                      <div className="w-11 h-11 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 flex-shrink-0 mt-0.5">
-                        <AlertTriangle className="w-6 h-6" />
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
-                          <h2 className="text-lg sm:text-xl font-bold text-white flex items-center gap-2">
-                            <span>Merge conflict detected</span>
-                          </h2>
-                          {pullRequest.mergeable_state && (
-                            <span className="text-[11px] font-mono px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                              state: {pullRequest.mergeable_state}
-                            </span>
-                          )}
+                      <div className="flex items-start gap-4">
+                        <div className="w-11 h-11 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 flex-shrink-0 mt-0.5">
+                          <AlertTriangle className="w-6 h-6" />
                         </div>
-                        <p className="text-xs sm:text-sm text-slate-300 leading-relaxed mb-6">
-                          MergeMind can analyze the conflicting changes and attempt semantic resolution.
-                        </p>
+                        <div className="flex-1">
+                          <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
+                            <h2 className="text-lg sm:text-xl font-bold text-white flex items-center gap-2">
+                              <span>Merge conflict detected</span>
+                            </h2>
+                            {pullRequest.mergeable_state && (
+                              <span className="text-[11px] font-mono px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                                state: {pullRequest.mergeable_state}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs sm:text-sm text-slate-300 leading-relaxed mb-6">
+                            MergeMind can extract the conflicting files and inspect Base, Local, and Remote versions deterministically.
+                          </p>
 
-                        {/* UI-only Action Button for Conflict Analysis */}
-                        <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              alert('Conflict analysis pipeline will be implemented in the next phase.');
-                            }}
-                            className="neu-glow-btn px-6 py-3 rounded-xl text-xs font-bold text-white flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(56,189,248,0.25)] hover:shadow-[0_0_28px_rgba(56,189,248,0.4)] transition-all cursor-pointer"
-                          >
-                            <Sparkles className="w-4 h-4 text-sky-300" />
-                            <span>Analyze Conflicts →</span>
-                          </button>
-                          <span className="text-[11px] text-slate-400 italic">
-                            (Semantic analysis engine available in upcoming step)
-                          </span>
+                          {/* Action Button for Conflict Analysis */}
+                          <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                            <button
+                              type="button"
+                              onClick={handleAnalyzeConflicts}
+                              disabled={analyzing}
+                              className="neu-glow-btn px-6 py-3 rounded-xl text-xs font-bold text-white flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(56,189,248,0.25)] hover:shadow-[0_0_28px_rgba(56,189,248,0.4)] transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                            >
+                              {analyzing ? (
+                                <>
+                                  <Loader2 className="w-4 h-4 text-sky-300 animate-spin" />
+                                  <span>Analyzing conflicts...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Sparkles className="w-4 h-4 text-sky-300" />
+                                  <span>{conflictData ? 'Re-analyze Conflicts' : 'Analyze Conflicts →'}</span>
+                                </>
+                              )}
+                            </button>
+                            <span className="text-[11px] text-slate-400 italic">
+                              Simulates Git 3-way merge in an isolated temporary sandbox
+                            </span>
+                          </div>
+
+                          {/* Analysis Error State */}
+                          {analysisError && (
+                            <div className="mt-4 p-4 rounded-xl bg-rose-950/30 border border-rose-500/30 flex items-start gap-3">
+                              <AlertCircle className="w-4 h-4 text-rose-400 flex-shrink-0 mt-0.5" />
+                              <div className="flex-1">
+                                <p className="text-xs font-semibold text-rose-300 mb-1">
+                                  Conflict extraction failed
+                                </p>
+                                <p className="text-xs text-rose-400/90 leading-relaxed">
+                                  {analysisError}
+                                </p>
+                              </div>
+                              <button
+                                onClick={handleAnalyzeConflicts}
+                                className="text-xs text-rose-300 hover:text-white underline"
+                              >
+                                Retry
+                              </button>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
+
+                    {/* Conflict Analysis Results Card */}
+                    {conflictData && (
+                      <div className="neu-panel rounded-2xl p-6 sm:p-7 border border-white/[0.08] shadow-[0_15px_40px_rgba(0,0,0,0.5)]">
+                        <div className="flex flex-wrap items-center justify-between gap-3 mb-5 pb-4 border-b border-white/[0.06]">
+                          <div className="flex items-center gap-3">
+                            <h3 className="text-base sm:text-lg font-bold text-white">
+                              Conflict Analysis
+                            </h3>
+                            <span className="text-xs font-mono px-2.5 py-1 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20 font-semibold flex items-center gap-1.5">
+                              <AlertTriangle className="w-3.5 h-3.5" />
+                              <span>
+                                {conflictData.conflicts?.length || 0} conflicting {conflictData.conflicts?.length === 1 ? 'file' : 'files'}
+                              </span>
+                            </span>
+                          </div>
+
+                          {conflictData.changed_files && conflictData.changed_files.length > 0 && (
+                            <span className="text-xs font-mono text-slate-400">
+                              {conflictData.changed_files.length} total changed {conflictData.changed_files.length === 1 ? 'file' : 'files'} in PR
+                            </span>
+                          )}
+                        </div>
+
+                        {/* List of Conflicting Files */}
+                        {conflictData.conflicts && conflictData.conflicts.length > 0 ? (
+                          <div className="space-y-3 mb-6">
+                            {conflictData.conflicts.map((c) => (
+                              <div
+                                key={c.path}
+                                className="p-4 rounded-xl neu-recessed border border-white/[0.05] flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                              >
+                                <div className="flex items-center gap-3 min-w-0">
+                                  <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 flex-shrink-0">
+                                    <FileCode className="w-4 h-4" />
+                                  </div>
+                                  <div className="truncate">
+                                    <p className="font-mono text-sm font-semibold text-white truncate">
+                                      {c.path}
+                                    </p>
+                                    <div className="flex items-center gap-2 text-[11px] text-slate-400 font-mono mt-0.5">
+                                      {c.base_sha && <span>base: {c.base_sha.slice(0, 7)}</span>}
+                                      {c.local_sha && <span>• local: {c.local_sha.slice(0, 7)}</span>}
+                                      {c.remote_sha && <span>• remote: {c.remote_sha.slice(0, 7)}</span>}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-2 flex-shrink-0">
+                                  <span className="text-[11px] font-mono uppercase px-2.5 py-1 rounded-md bg-sky-500/10 text-sky-300 border border-sky-500/20">
+                                    {c.language}
+                                  </span>
+                                  <span className="text-[11px] font-mono px-2.5 py-1 rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                                    {c.conflict_type}
+                                  </span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="p-4 rounded-xl neu-recessed border border-white/[0.04] text-center text-xs text-slate-400 mb-6">
+                            No conflicting files detected in the simulation.
+                          </div>
+                        )}
+
+                        {/* Success Footer */}
+                        <div className="flex items-center justify-between pt-2">
+                          <div className="flex items-center gap-2 text-xs font-medium text-emerald-400">
+                            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                            <span>{conflictData.message || 'Conflict data extracted successfully.'}</span>
+                          </div>
+
+                          <button
+                            onClick={handleAnalyzeConflicts}
+                            disabled={analyzing}
+                            className="neu-button px-3 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:text-white flex items-center gap-1.5 transition-colors disabled:opacity-50"
+                          >
+                            <RefreshCw className={`w-3.5 h-3.5 text-sky-400 ${analyzing ? 'animate-spin' : ''}`} />
+                            <span>Refresh</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 

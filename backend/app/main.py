@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
-from app.api.routes import github, pull_requests
+from app.api.routes import conflicts, github, pull_requests
 
 app = FastAPI(
     title="MergeMind API",
@@ -28,6 +28,7 @@ app.add_middleware(
 # Mount API routes
 app.include_router(github.router, prefix="/api")
 app.include_router(pull_requests.router, prefix="/api")
+app.include_router(conflicts.router, prefix="/api")
 
 
 @app.get("/api/health", tags=["health"])

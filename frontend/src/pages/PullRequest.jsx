@@ -425,32 +425,101 @@ export default function PullRequest() {
                             {conflictData.conflicts.map((c) => (
                               <div
                                 key={c.path}
-                                className="p-4 rounded-xl neu-recessed border border-white/[0.05] flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                                className="p-4 rounded-xl neu-recessed border border-white/[0.05] space-y-3"
                               >
-                                <div className="flex items-center gap-3 min-w-0">
-                                  <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 flex-shrink-0">
-                                    <FileCode className="w-4 h-4" />
-                                  </div>
-                                  <div className="truncate">
-                                    <p className="font-mono text-sm font-semibold text-white truncate">
-                                      {c.path}
-                                    </p>
-                                    <div className="flex items-center gap-2 text-[11px] text-slate-400 font-mono mt-0.5">
-                                      {c.base_sha && <span>base: {c.base_sha.slice(0, 7)}</span>}
-                                      {c.local_sha && <span>• local: {c.local_sha.slice(0, 7)}</span>}
-                                      {c.remote_sha && <span>• remote: {c.remote_sha.slice(0, 7)}</span>}
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                  <div className="flex items-center gap-3 min-w-0">
+                                    <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 flex-shrink-0">
+                                      <FileCode className="w-4 h-4" />
                                     </div>
+                                    <div className="truncate">
+                                      <p className="font-mono text-sm font-semibold text-white truncate">
+                                        {c.path}
+                                      </p>
+                                      <div className="flex items-center gap-2 text-[11px] text-slate-400 font-mono mt-0.5">
+                                        {c.base_sha && <span>base: {c.base_sha.slice(0, 7)}</span>}
+                                        {c.local_sha && <span>• local: {c.local_sha.slice(0, 7)}</span>}
+                                        {c.remote_sha && <span>• remote: {c.remote_sha.slice(0, 7)}</span>}
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  <div className="flex items-center gap-2 flex-shrink-0">
+                                    <span className="text-[11px] font-mono uppercase px-2.5 py-1 rounded-md bg-sky-500/10 text-sky-300 border border-sky-500/20">
+                                      {c.language}
+                                    </span>
+                                    <span className="text-[11px] font-mono px-2.5 py-1 rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                                      {c.conflict_type}
+                                    </span>
                                   </div>
                                 </div>
 
-                                <div className="flex items-center gap-2 flex-shrink-0">
-                                  <span className="text-[11px] font-mono uppercase px-2.5 py-1 rounded-md bg-sky-500/10 text-sky-300 border border-sky-500/20">
-                                    {c.language}
-                                  </span>
-                                  <span className="text-[11px] font-mono px-2.5 py-1 rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                                    {c.conflict_type}
-                                  </span>
-                                </div>
+                                {/* Semantic Structure AST Analysis Card */}
+                                {c.ast_analysis && (
+                                  <div className="pt-3 border-t border-white/[0.06] space-y-2.5">
+                                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 font-semibold">
+                                          Semantic Structure
+                                        </span>
+                                        <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
+                                          {c.ast_analysis.classification?.category || 'UNKNOWN'}
+                                        </span>
+                                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-white/[0.04] text-slate-400">
+                                          deterministic
+                                        </span>
+                                      </div>
+                                      <span className="text-[10px] text-slate-500 font-mono">
+                                        Tree-sitter AST
+                                      </span>
+                                    </div>
+
+                                    {/* Local vs Remote structural changes summary */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-mono">
+                                      <div className="p-2.5 rounded-lg bg-slate-950/60 border border-white/[0.04]">
+                                        <span className="text-[10px] uppercase text-sky-400 font-bold block mb-1">
+                                          Local changes (target):
+                                        </span>
+                                        {c.ast_analysis.changes?.local && c.ast_analysis.changes.local.length > 0 ? (
+                                          <ul className="space-y-1 text-slate-300">
+                                            {c.ast_analysis.changes.local.map((ch, idx) => (
+                                              <li key={idx} className="truncate">
+                                                • {ch.node_name ? `${ch.node_name}()` : ch.details}
+                                              </li>
+                                            ))}
+                                          </ul>
+                                        ) : (
+                                          <span className="text-slate-500 italic">No structural delta</span>
+                                        )}
+                                      </div>
+
+                                      <div className="p-2.5 rounded-lg bg-slate-950/60 border border-white/[0.04]">
+                                        <span className="text-[10px] uppercase text-amber-400 font-bold block mb-1">
+                                          Remote changes (source):
+                                        </span>
+                                        {c.ast_analysis.changes?.remote && c.ast_analysis.changes.remote.length > 0 ? (
+                                          <ul className="space-y-1 text-slate-300">
+                                            {c.ast_analysis.changes.remote.map((ch, idx) => (
+                                              <li key={idx} className="truncate">
+                                                • {ch.node_name ? `${ch.node_name}()` : ch.details}
+                                              </li>
+                                            ))}
+                                          </ul>
+                                        ) : (
+                                          <span className="text-slate-500 italic">No structural delta</span>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    {/* Deterministic Explanation Reason */}
+                                    {c.ast_analysis.classification?.reason && (
+                                      <p className="text-xs text-slate-300 bg-white/[0.02] p-2.5 rounded-lg border border-white/[0.03]">
+                                        <span className="font-semibold text-sky-300">Reason: </span>
+                                        {c.ast_analysis.classification.reason}
+                                      </p>
+                                    )}
+                                  </div>
+                                )}
                               </div>
                             ))}
                           </div>

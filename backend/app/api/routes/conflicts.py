@@ -148,6 +148,17 @@ def get_pull_request_conflicts(
         )
 
         conflicts = extraction_result["conflicts"]
+        # Run Tree-sitter AST analysis on each conflicting file
+        from app.ast import analyze_conflicted_file
+        for c in conflicts:
+            ast_res = analyze_conflicted_file(
+                path=c["path"],
+                base_code=c.get("base", ""),
+                local_code=c.get("local", ""),
+                remote_code=c.get("remote", ""),
+            )
+            c["ast_analysis"] = ast_res.model_dump()
+
         msg = (
             "Conflict data extracted successfully."
             if conflicts
@@ -208,3 +219,59 @@ def get_pull_request_conflicts(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error while extracting merge conflicts.",
         ) from exc
+
+
+@router.get("/repositories/{owner}/{repo}/pulls/{pull_number}/conflicts/ast")
+def get_pull_request_conflicts_ast(
+    owner: str,
+    repo: str,
+    pull_number: int,
+    request: Request,
+    installation_id_cookie: str | None = Cookie(
+        default=None,
+        alias="installation_id",
+        description="GitHub App installation ID stored in HttpOnly cookie",
+    ),
+    installation_id_query: int | None = Query(
+        default=None,
+        alias="installation_id",
+        description="Optional installation ID override for testing or direct API clients",
+    ),
+    installation_id_header: str | None = Header(
+        default=None,
+        alias="x-installation-id",
+        description="Optional installation ID provided via HTTP header",
+    ),
+) -> dict[str, Any]:
+    """
+    Retrieve deterministic Tree-sitter AST structural analysis and classification
+    for each conflicting file in a pull request.
+    """
+    conflict_data = get_pull_request_conflicts(
+        owner=owner,
+        repo=repo,
+        pull_number=pull_number,
+        request=request,
+        installation_id_cookie=installation_id_cookie,
+        installation_id_query=installation_id_query,
+        installation_id_header=installation_id_header,
+    )
+
+    conflicts = conflict_data.get("conflicts", [])
+    conflicts_ast = [
+        c.get("ast_analysis")
+        for c in conflicts
+        if c.get("ast_analysis") is not None
+    ]
+
+    return {
+        "repository": conflict_data.get("repository"),
+        "pull_request": conflict_data.get("pull_request"),
+        "changed_files": conflict_data.get("changed_files", []),
+        "conflicting_files": conflict_data.get("conflicting_files", []),
+        "conflicts_ast": conflicts_ast,
+        "message": "AST conflict classification completed successfully."
+        if conflicts_ast
+        else conflict_data.get("message", "No AST analysis available."),
+    }
+

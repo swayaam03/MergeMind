@@ -1,8 +1,9 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
-import { ArrowRight, Terminal } from 'lucide-react';
+import { ArrowRight, Terminal, Loader2 } from 'lucide-react';
+import { useGetStarted } from '../../hooks/useGetStarted';
 
 export default function CTA() {
+  const { handleGetStarted, checking } = useGetStarted();
   return (
     <section className="py-20 sm:py-28 relative z-10">
       <div className="max-w-5xl mx-auto px-6 sm:px-8 text-center">
@@ -22,13 +23,17 @@ export default function CTA() {
             </p>
 
             <div className="flex flex-wrap items-center justify-center gap-4">
-              <Link
-                to="/connect"
-                className="neu-glow-btn px-8 py-4 rounded-full text-base font-semibold text-white flex items-center gap-3 group"
+              <button
+                onClick={handleGetStarted}
+                disabled={checking}
+                className="neu-glow-btn px-8 py-4 rounded-full text-base font-semibold text-white flex items-center gap-3 group disabled:opacity-75"
               >
+                {checking && <Loader2 className="w-4 h-4 text-sky-300 animate-spin" />}
                 <span>Get Started</span>
-                <ArrowRight className="w-4 h-4 text-sky-300 transition-transform duration-200 group-hover:translate-x-1" />
-              </Link>
+                {!checking && (
+                  <ArrowRight className="w-4 h-4 text-sky-300 transition-transform duration-200 group-hover:translate-x-1" />
+                )}
+              </button>
 
               <a
                 href="#review"

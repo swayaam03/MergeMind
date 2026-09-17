@@ -70,7 +70,7 @@ export default function Repositories() {
             <Logo />
           </Link>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5 sm:gap-3">
             <button
               onClick={fetchRepositories}
               disabled={loading}
@@ -83,10 +83,20 @@ export default function Repositories() {
 
             <Link
               to="/connect"
-              className="neu-button px-4 py-2 rounded-full text-xs font-medium text-slate-300 hover:text-white flex items-center gap-1.5 transition-colors"
+              className="neu-button px-3.5 py-2 rounded-full text-xs font-medium text-slate-300 hover:text-white flex items-center gap-1.5 transition-colors"
+              title="Manage GitHub App connection"
+            >
+              <PlusCircle className="w-3.5 h-3.5 text-sky-400" />
+              <span className="hidden sm:inline">Manage Connection</span>
+            </Link>
+
+            <Link
+              to="/"
+              className="neu-button px-3.5 py-2 rounded-full text-xs font-medium text-slate-300 hover:text-white flex items-center gap-1.5 transition-colors"
+              title="Back to Landing Page"
             >
               <ArrowLeft className="w-3.5 h-3.5 text-sky-400" />
-              <span>Back to Connect</span>
+              <span>Home</span>
             </Link>
           </div>
         </div>
@@ -188,93 +198,102 @@ export default function Repositories() {
         {/* State 4: Success State (Display Repository Cards) */}
         {!loading && !error && repositories.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-stretch">
-            {repositories.map((repo) => (
-              <div
-                key={repo.id}
-                className="neu-panel neu-panel-hover rounded-2xl p-6 flex flex-col justify-between border border-white/[0.07] relative group overflow-hidden"
-              >
-                {/* Top Subtle Glow Line */}
-                <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-sky-400/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+            {repositories.map((repo) => {
+              const repoOwner = typeof repo.owner === 'object'
+                ? repo.owner?.login
+                : (repo.owner || (repo.full_name ? repo.full_name.split('/')[0] : ''));
+              const repoName = repo.name || (repo.full_name ? repo.full_name.split('/')[1] : '');
+              const repoPath = `/repositories/${repoOwner}/${repoName}`;
 
-                {/* Card Content Top */}
-                <div>
-                  <div className="flex items-start justify-between gap-3 mb-4">
-                    {/* Repository Icon Recessed Well */}
-                    <div className="w-11 h-11 rounded-xl neu-recessed flex items-center justify-center text-sky-400 flex-shrink-0">
-                      <FolderGit2 className="w-5 h-5" />
+              return (
+                <div
+                  key={repo.id}
+                  className="neu-panel neu-panel-hover rounded-2xl p-6 flex flex-col justify-between border border-white/[0.07] relative group overflow-hidden"
+                >
+                  {/* Top Subtle Glow Line */}
+                  <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-sky-400/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+
+                  {/* Card Content Top */}
+                  <div>
+                    <div className="flex items-start justify-between gap-3 mb-4">
+                      {/* Repository Icon Recessed Well */}
+                      <div className="w-11 h-11 rounded-xl neu-recessed flex items-center justify-center text-sky-400 flex-shrink-0">
+                        <FolderGit2 className="w-5 h-5" />
+                      </div>
+
+                      {/* Private / Public Status Pill */}
+                      {repo.private ? (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-300 text-[11px] font-mono border border-amber-500/20">
+                          <Lock className="w-3 h-3" />
+                          <span>Private</span>
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-[11px] font-mono border border-emerald-500/20">
+                          <Globe className="w-3 h-3" />
+                          <span>Public</span>
+                        </span>
+                      )}
                     </div>
 
-                    {/* Private / Public Status Pill */}
-                    {repo.private ? (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-300 text-[11px] font-mono border border-amber-500/20">
-                        <Lock className="w-3 h-3" />
-                        <span>Private</span>
-                      </span>
+                    {/* Repository Name */}
+                    <Link
+                      to={repoPath}
+                      className="text-base sm:text-lg font-bold text-white tracking-tight break-words hover:text-sky-300 transition-colors block"
+                    >
+                      {repoName}
+                    </Link>
+
+                    {/* Owner / Full Name */}
+                    <p className="text-xs font-mono text-slate-400 mt-1 truncate">
+                      {repoOwner}/{repoName}
+                    </p>
+
+                    {/* Description (if present) */}
+                    {repo.description ? (
+                      <p className="text-xs text-slate-400 mt-3 line-clamp-2 leading-relaxed font-normal">
+                        {repo.description}
+                      </p>
                     ) : (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-[11px] font-mono border border-emerald-500/20">
-                        <Globe className="w-3 h-3" />
-                        <span>Public</span>
-                      </span>
+                      <p className="text-xs text-slate-500 mt-3 italic font-normal">
+                        No description provided.
+                      </p>
                     )}
                   </div>
 
-                  {/* Repository Name */}
-                  <Link
-                    to={`/repositories/${repo.full_name}`}
-                    className="text-base sm:text-lg font-bold text-white tracking-tight break-words hover:text-sky-300 transition-colors block"
-                  >
-                    {repo.name}
-                  </Link>
+                  {/* Card Footer / Bottom Controls */}
+                  <div className="mt-6 pt-4 border-t border-white/[0.05] space-y-3">
+                    {/* Default Branch Tag & Secondary Action: View on GitHub */}
+                    <div className="flex items-center justify-between text-xs font-mono">
+                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md neu-recessed text-slate-300 border border-white/[0.03]">
+                        <GitBranch className="w-3 h-3 text-sky-400" />
+                        <span>{repo.default_branch || 'main'}</span>
+                      </span>
 
-                  {/* Owner / Full Name */}
-                  <p className="text-xs font-mono text-slate-400 mt-1 truncate">
-                    {repo.full_name}
-                  </p>
+                      {/* Secondary Action: View on GitHub ↗ */}
+                      <a
+                        href={repo.html_url || `https://github.com/${repoOwner}/${repoName}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="neu-button px-2.5 py-1 rounded-lg text-[11px] font-medium text-slate-300 hover:text-white inline-flex items-center gap-1.5 transition-colors group/btn"
+                        title="Open on GitHub"
+                      >
+                        <span>View on GitHub</span>
+                        <ExternalLink className="w-3 h-3 text-sky-400 group-hover/btn:translate-x-0.5 group-hover/btn:-translate-y-0.5 transition-transform" />
+                      </a>
+                    </div>
 
-                  {/* Description (if present) */}
-                  {repo.description ? (
-                    <p className="text-xs text-slate-400 mt-3 line-clamp-2 leading-relaxed font-normal">
-                      {repo.description}
-                    </p>
-                  ) : (
-                    <p className="text-xs text-slate-500 mt-3 italic font-normal">
-                      No description provided.
-                    </p>
-                  )}
-                </div>
-
-                {/* Card Footer / Bottom Controls */}
-                <div className="mt-6 pt-4 border-t border-white/[0.05] space-y-3">
-                  {/* Default Branch Tag & GitHub External Link */}
-                  <div className="flex items-center justify-between text-xs font-mono">
-                    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md neu-recessed text-slate-300 border border-white/[0.03]">
-                      <GitBranch className="w-3 h-3 text-sky-400" />
-                      <span>{repo.default_branch || 'main'}</span>
-                    </span>
-
-                    <a
-                      href={repo.html_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-[11px] text-slate-400 hover:text-sky-300 inline-flex items-center gap-1 transition-colors"
-                      title="Open on GitHub"
+                    {/* Primary Action: Open in MergeMind */}
+                    <Link
+                      to={repoPath}
+                      className="neu-glow-btn w-full py-2.5 px-4 rounded-xl text-xs font-semibold text-white flex items-center justify-center gap-2 group/btn transition-all"
                     >
-                      <span>GitHub</span>
-                      <ExternalLink className="w-3 h-3 text-sky-400" />
-                    </a>
+                      <span>Open in MergeMind</span>
+                      <ArrowRight className="w-3.5 h-3.5 text-sky-300 group-hover/btn:translate-x-1 transition-transform" />
+                    </Link>
                   </div>
-
-                  {/* Internal Navigation Action */}
-                  <Link
-                    to={`/repositories/${repo.full_name}`}
-                    className="neu-glow-btn w-full py-2.5 px-4 rounded-xl text-xs font-semibold text-white flex items-center justify-center gap-2 group/btn transition-all"
-                  >
-                    <span>View Pull Requests</span>
-                    <ArrowRight className="w-3.5 h-3.5 text-sky-300 group-hover/btn:translate-x-1 transition-transform" />
-                  </Link>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 

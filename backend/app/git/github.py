@@ -246,9 +246,19 @@ def list_repositories_for_installation(
 
     safe_repos = []
     for repo in raw_repos:
+        raw_owner = repo.get("owner")
+        owner_name = ""
+        if isinstance(raw_owner, dict):
+            owner_name = raw_owner.get("login", "")
+        elif isinstance(raw_owner, str):
+            owner_name = raw_owner
+        if not owner_name and "/" in repo.get("full_name", ""):
+            owner_name = repo.get("full_name", "").split("/")[0]
+
         safe_repos.append({
             "id": repo.get("id"),
             "name": repo.get("name", ""),
+            "owner": owner_name,
             "full_name": repo.get("full_name", ""),
             "private": bool(repo.get("private", False)),
             "default_branch": repo.get("default_branch", "main"),

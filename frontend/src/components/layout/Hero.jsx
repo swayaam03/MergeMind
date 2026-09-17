@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
 import ParticleCloud from './ParticleCloud';
-import { ArrowRight, Play, Terminal, CheckCircle2, X } from 'lucide-react';
+import { ArrowRight, Play, Terminal, CheckCircle2, X, Loader2 } from 'lucide-react';
+import { useGetStarted } from '../../hooks/useGetStarted';
 
 export default function Hero() {
   const [showDemoModal, setShowDemoModal] = useState(false);
+  const { handleGetStarted, checking } = useGetStarted();
 
   return (
     <section id="home" className="relative pt-32 pb-20 md:pt-40 md:pb-28 overflow-hidden min-h-[92vh] flex items-center">
@@ -47,13 +48,23 @@ export default function Hero() {
 
             {/* CTA Buttons */}
             <div className="flex flex-wrap items-center gap-4 sm:gap-5 w-full sm:w-auto">
-              <Link
-                to="/connect"
-                className="neu-glow-btn px-7 py-3.5 rounded-full text-base font-semibold text-white flex items-center justify-center gap-2.5 group w-full sm:w-auto"
+              <button
+                onClick={handleGetStarted}
+                disabled={checking}
+                className="neu-glow-btn px-7 py-3.5 rounded-full text-base font-semibold text-white flex items-center justify-center gap-2.5 group w-full sm:w-auto disabled:opacity-75"
               >
-                <span>Get Started</span>
-                <ArrowRight className="w-4 h-4 text-sky-300 transition-transform duration-200 group-hover:translate-x-1" />
-              </Link>
+                {checking ? (
+                  <>
+                    <Loader2 className="w-4 h-4 text-sky-300 animate-spin" />
+                    <span>Checking...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Get Started</span>
+                    <ArrowRight className="w-4 h-4 text-sky-300 transition-transform duration-200 group-hover:translate-x-1" />
+                  </>
+                )}
+              </button>
 
               <button
                 onClick={() => setShowDemoModal(true)}

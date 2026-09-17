@@ -271,18 +271,33 @@ export default function PullRequest() {
                 ? `The secure session has expired. Please return to the connection page.`
                 : `MergeMind was unable to retrieve mergeability details from GitHub.`}
             </p>
-            <div className="flex items-center justify-center gap-4">
+            <div className="flex flex-wrap items-center justify-center gap-3">
               <button
                 onClick={fetchPullRequest}
                 className="neu-button px-5 py-2.5 rounded-xl text-xs font-medium text-white hover:text-sky-300 transition-colors"
               >
                 Try Again
               </button>
+              {errorStatus === 401 ? (
+                <Link
+                  to="/connect"
+                  className="neu-glow-btn px-5 py-2.5 rounded-xl text-xs font-semibold text-white"
+                >
+                  Connect GitHub
+                </Link>
+              ) : (
+                <Link
+                  to={`/repositories/${owner}/${repo}`}
+                  className="neu-glow-btn px-5 py-2.5 rounded-xl text-xs font-semibold text-white"
+                >
+                  Back to Pull Requests
+                </Link>
+              )}
               <Link
-                to={`/repositories/${owner}/${repo}`}
-                className="neu-glow-btn px-5 py-2.5 rounded-xl text-xs font-semibold text-white"
+                to="/repositories"
+                className="neu-button px-5 py-2.5 rounded-xl text-xs font-medium text-slate-300 hover:text-white"
               >
-                Back to Repository
+                All Repositories
               </Link>
             </div>
           </div>

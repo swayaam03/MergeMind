@@ -1,13 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import Logo from '../common/Logo';
-import { ArrowRight, Menu, X } from 'lucide-react';
+import { ArrowRight, Menu, X, Loader2 } from 'lucide-react';
+import { useGetStarted } from '../../hooks/useGetStarted';
 
 export default function Navbar({ activeSection, onNavigate }) {
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const navRef = useRef(null);
   const [indicatorStyle, setIndicatorStyle] = useState({ left: 0, top: 0, width: 0, height: 0, opacity: 0 });
+  const { handleGetStarted, checking } = useGetStarted();
 
   useEffect(() => {
     const handleScroll = () => {
@@ -121,13 +123,17 @@ export default function Navbar({ activeSection, onNavigate }) {
 
         {/* Right: CTA Button */}
         <div className="hidden md:flex items-center gap-4">
-          <Link
-            to="/connect"
-            className="neu-button px-5 py-2 rounded-full text-sm font-medium text-slate-200 flex items-center gap-2 group"
+          <button
+            onClick={handleGetStarted}
+            disabled={checking}
+            className="neu-button px-5 py-2 rounded-full text-sm font-medium text-slate-200 flex items-center gap-2 group disabled:opacity-75"
           >
+            {checking && <Loader2 className="w-3.5 h-3.5 text-sky-400 animate-spin" />}
             <span>Get Started</span>
-            <ArrowRight className="w-3.5 h-3.5 text-sky-400 transition-transform duration-200 group-hover:translate-x-0.5" />
-          </Link>
+            {!checking && (
+              <ArrowRight className="w-3.5 h-3.5 text-sky-400 transition-transform duration-200 group-hover:translate-x-0.5" />
+            )}
+          </button>
         </div>
 
         {/* Mobile menu trigger */}
@@ -162,14 +168,18 @@ export default function Navbar({ activeSection, onNavigate }) {
               );
             })}
             <div className="pt-3 mt-1 border-t border-white/[0.06]">
-              <Link
-                to="/connect"
-                onClick={() => setMobileMenuOpen(false)}
-                className="w-full neu-glow-btn py-2.5 rounded-xl text-sm font-medium text-white flex items-center justify-center gap-2"
+              <button
+                onClick={(e) => {
+                  setMobileMenuOpen(false);
+                  handleGetStarted(e);
+                }}
+                disabled={checking}
+                className="w-full neu-glow-btn py-2.5 rounded-xl text-sm font-medium text-white flex items-center justify-center gap-2 disabled:opacity-75"
               >
+                {checking && <Loader2 className="w-3.5 h-3.5 text-sky-300 animate-spin" />}
                 <span>Get Started</span>
-                <ArrowRight className="w-3.5 h-3.5 text-sky-300" />
-              </Link>
+                {!checking && <ArrowRight className="w-3.5 h-3.5 text-sky-300" />}
+              </button>
             </div>
           </nav>
         </div>

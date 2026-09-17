@@ -256,9 +256,12 @@ export default function Repository() {
                   </div>
 
                   {/* PR Title */}
-                  <h3 className="text-lg font-bold text-white tracking-tight leading-snug mb-2 group-hover:text-sky-300 transition-colors">
+                  <Link
+                    to={`/repositories/${owner}/${repo}/pulls/${pr.number}`}
+                    className="text-lg font-bold text-white tracking-tight leading-snug mb-2 hover:text-sky-300 transition-colors block"
+                  >
                     {pr.title}
-                  </h3>
+                  </Link>
 
                   {/* Author */}
                   <p className="text-xs font-mono text-slate-400 mb-4">
@@ -277,20 +280,25 @@ export default function Repository() {
                   </div>
                 </div>
 
-                {/* Footer Controls: Check Mergeability & View on GitHub */}
-                <div className="mt-6 pt-4 border-t border-white/[0.05] flex items-center justify-between gap-2">
-                  <span className="text-xs font-mono text-sky-400 font-medium group-hover:underline flex items-center gap-1">
-                    Check Mergeability
-                    <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
-                  </span>
+                {/* Footer Controls: Analyze Pull Request & View on GitHub */}
+                <div className="mt-6 pt-4 border-t border-white/[0.05] flex flex-wrap items-center justify-between gap-3">
+                  <Link
+                    to={`/repositories/${owner}/${repo}/pulls/${pr.number}`}
+                    className="neu-glow-btn flex-1 py-2.5 px-4 rounded-xl text-xs font-semibold text-white flex items-center justify-center gap-2 group/btn transition-all"
+                  >
+                    <span>Analyze Pull Request</span>
+                    <ArrowRight className="w-3.5 h-3.5 text-sky-300 group-hover/btn:translate-x-1 transition-transform" />
+                  </Link>
+
                   <a
                     href={pr.html_url}
                     onClick={(e) => e.stopPropagation()}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="neu-button px-3 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:text-white inline-flex items-center gap-1.5 transition-colors group/btn"
+                    className="neu-button px-3 py-2.5 rounded-xl text-xs font-medium text-slate-300 hover:text-white inline-flex items-center gap-1.5 transition-colors group/btn flex-shrink-0"
+                    title="View on GitHub"
                   >
-                    <span>View GitHub</span>
+                    <span>View on GitHub</span>
                     <ExternalLink className="w-3.5 h-3.5 text-sky-400 group-hover/btn:translate-x-0.5 group-hover/btn:-translate-y-0.5 transition-transform" />
                   </a>
                 </div>

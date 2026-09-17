@@ -25,6 +25,11 @@ class Settings(BaseSettings):
     FRONTEND_URL: str = "http://localhost:5173"
     BACKEND_URL: str = "http://localhost:8000"
 
+    # Repository Context Limits
+    MERGEMIND_MAX_DOCUMENTATION_CHARS: int = 10_000
+    MERGEMIND_MAX_TREE_ENTRIES: int = 500
+    MERGEMIND_MAX_RELEVANT_FILES: int = 10
+
     @property
     def github_installation_url(self) -> str:
         """Construct the GitHub App installation URL."""

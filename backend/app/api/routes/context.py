@@ -1,12 +1,14 @@
 """API route for repository context extraction."""
 
 import logging
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Cookie, Header, HTTPException, Query, Request, status
 
 from app.api.routes.pull_requests import resolve_installation_id
+from app.ast import analyze_conflicted_file
 from app.context.extractor import extract_repository_context
+from app.git.conflicts import simulate_merge_and_extract_conflicts
 from app.git.github import (
     GitHubAPIError,
     GitHubAuthError,
@@ -29,7 +31,7 @@ def get_repository_context(
     request: Request,
     conflicting_files: Optional[List[str]] = Query(
         default=None,
-        description="Optional list of conflicting file paths to discover relevant neighbor files for",
+        description="Optional explicit list of conflicting file paths",
     ),
     installation_id_cookie: Optional[str] = Cookie(
         default=None,
@@ -50,12 +52,15 @@ def get_repository_context(
     """
     Retrieve deterministic repository context for a pull request.
 
-    Collects:
-    - Truncated repository README preview
-    - Repository directory tree structure
-    - GitHub language breakdown
-    - Deterministically detected technologies & frameworks
-    - Non-conflicting neighbor and test file previews
+    Pipeline:
+    1. Authenticate using existing GitHub App installation context.
+    2. Verify repository access.
+    3. Retrieve pull request detail (base/head branches, mergeability).
+    4. Retrieve conflict data & AST analysis if PR is conflicted.
+    5. Run deterministic Repository Context extraction.
+    6. Return structured context matching Section 11 model.
+
+    Never exposes tokens, private keys, or credentials.
     """
     target_installation_id = resolve_installation_id(
         request=request,
@@ -94,15 +99,60 @@ def get_repository_context(
         head_obj = pr_data.get("head") or {}
         base_ref = base_obj.get("ref", "main")
         head_ref = head_obj.get("ref", "")
+        base_sha = base_obj.get("sha", "")
+        head_sha = head_obj.get("sha", "")
+        mergeable = pr_data.get("mergeable")
 
-        # 3. Extract repository context
+        conflicts_list: List[str] = list(conflicting_files or [])
+        ast_analyses: Dict[str, Any] = {}
+        conflict_sources: Dict[str, str] = {}
+
+        # 3. Retrieve conflict data and AST analysis if PR is conflicted
+        if mergeable is False and not conflicts_list:
+            try:
+                extraction = simulate_merge_and_extract_conflicts(
+                    owner=owner,
+                    repo=repo,
+                    pull_number=pull_number,
+                    base_branch=base_ref,
+                    head_branch=head_ref,
+                    base_sha=base_sha,
+                    head_sha=head_sha,
+                    installation_token=installation_token,
+                )
+                conflicts = extraction.get("conflicts", [])
+                for c in conflicts:
+                    cpath = c.get("path", "")
+                    if cpath:
+                        conflicts_list.append(cpath)
+                        conflict_sources[cpath] = c.get("local", "") or c.get("base", "")
+                        # Reuse Tree-sitter AST analysis
+                        ast_res = analyze_conflicted_file(
+                            path=cpath,
+                            base_code=c.get("base", ""),
+                            local_code=c.get("local", ""),
+                            remote_code=c.get("remote", ""),
+                        )
+                        ast_analyses[cpath] = ast_res.model_dump()
+            except Exception as exc:
+                logger.warning(
+                    "Could not extract live conflicts for context on %s/%s #%d: %s",
+                    owner,
+                    repo,
+                    pull_number,
+                    exc,
+                )
+
+        # 4. Extract repository context
         context_result = extract_repository_context(
             owner=owner,
             repo=repo,
             token=installation_token,
             base_ref=base_ref,
             head_ref=head_ref,
-            conflicting_files=conflicting_files or [],
+            conflicting_files=conflicts_list,
+            ast_analyses=ast_analyses,
+            conflict_sources=conflict_sources,
         )
 
         return context_result.model_dump()

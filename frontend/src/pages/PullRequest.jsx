@@ -46,6 +46,14 @@ export default function PullRequest() {
   const [readmeOpen, setReadmeOpen] = useState(false);
   const [treeOpen, setTreeOpen] = useState(false);
   const [filePreviewsOpen, setFilePreviewsOpen] = useState({});
+  const [docPreviewsOpen, setDocPreviewsOpen] = useState({});
+
+  const toggleDocPreview = (path) => {
+    setDocPreviewsOpen((prev) => ({
+      ...prev,
+      [path]: !prev[path],
+    }));
+  };
 
   const toggleFilePreview = (path) => {
     setFilePreviewsOpen((prev) => ({
@@ -712,6 +720,21 @@ export default function PullRequest() {
                         {!loadingContext && !contextError && repositoryContext && contextOpen && (
                           <div className="space-y-6">
 
+                            {/* Section 0: Project Description (Deterministic) */}
+                            {repositoryContext.project?.description && (
+                              <div className="p-3.5 rounded-xl neu-recessed border border-sky-500/20 bg-sky-950/20 flex items-start gap-2.5">
+                                <Info className="w-4 h-4 text-sky-400 flex-shrink-0 mt-0.5" />
+                                <div className="min-w-0">
+                                  <h4 className="text-[11px] font-bold uppercase tracking-wider text-sky-300 font-mono">
+                                    Project Description
+                                  </h4>
+                                  <p className="text-xs text-slate-300 mt-1 leading-relaxed">
+                                    {repositoryContext.project.description}
+                                  </p>
+                                </div>
+                              </div>
+                            )}
+
                             {/* Section 1: Detected Technologies & Frameworks */}
                             <div>
                               <div className="flex items-center gap-2 mb-3">
@@ -720,47 +743,72 @@ export default function PullRequest() {
                                   Detected Technologies & Frameworks
                                 </h4>
                                 <span className="text-[11px] font-mono text-slate-500">
-                                  ({repositoryContext.detected_technologies?.length || 0})
+                                  ({(repositoryContext.detected_technologies?.length || 0) + (repositoryContext.project?.frameworks?.length || 0)})
                                 </span>
                               </div>
 
-                              {repositoryContext.detected_technologies && repositoryContext.detected_technologies.length > 0 ? (
-                                <div className="flex flex-wrap gap-2">
-                                  {repositoryContext.detected_technologies.map((tech, idx) => {
-                                    const catColors = {
-                                      framework: 'bg-indigo-500/10 text-indigo-300 border-indigo-500/25',
-                                      language: 'bg-sky-500/10 text-sky-300 border-sky-500/25',
-                                      testing: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/25',
-                                      runtime: 'bg-purple-500/10 text-purple-300 border-purple-500/25',
-                                      package_manager: 'bg-slate-500/10 text-slate-300 border-slate-500/25',
-                                      build: 'bg-amber-500/10 text-amber-300 border-amber-500/25',
-                                    };
-                                    const badgeClass = catColors[tech.category] || 'bg-sky-500/10 text-sky-300 border-sky-500/25';
+                              <div className="flex flex-wrap gap-2">
+                                {repositoryContext.project?.languages?.map((lang, idx) => (
+                                  <div
+                                    key={`lang-${idx}`}
+                                    className="p-2 rounded-xl neu-recessed border border-sky-500/20 flex items-center gap-2 text-xs"
+                                  >
+                                    <span className="w-2 h-2 rounded-full bg-sky-400" />
+                                    <span className="font-bold text-white font-mono capitalize">{lang}</span>
+                                    <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-sky-500/10 text-sky-300 border border-sky-500/20">
+                                      language
+                                    </span>
+                                  </div>
+                                ))}
 
-                                    return (
-                                      <div
-                                        key={idx}
-                                        className="p-2.5 rounded-xl neu-recessed border border-white/[0.04] flex items-center gap-2 text-xs"
-                                      >
-                                        <span className="font-bold text-white font-mono">{tech.name}</span>
-                                        {tech.version && (
-                                          <span className="font-mono text-[10px] text-slate-400 px-1.5 py-0.5 rounded bg-black/40">
-                                            {tech.version}
-                                          </span>
-                                        )}
-                                        <span className={`text-[10px] font-mono uppercase px-1.5 py-0.5 rounded border ${badgeClass}`}>
-                                          {tech.category}
+                                {repositoryContext.project?.package_managers?.map((pm, idx) => (
+                                  <div
+                                    key={`pm-${idx}`}
+                                    className="p-2 rounded-xl neu-recessed border border-white/[0.04] flex items-center gap-2 text-xs"
+                                  >
+                                    <span className="font-bold text-white font-mono">{pm}</span>
+                                    <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-slate-500/10 text-slate-300 border border-slate-500/20">
+                                      pkg manager
+                                    </span>
+                                  </div>
+                                ))}
+
+                                {repositoryContext.detected_technologies && repositoryContext.detected_technologies.map((tech, idx) => {
+                                  const catColors = {
+                                    framework: 'bg-indigo-500/10 text-indigo-300 border-indigo-500/25',
+                                    language: 'bg-sky-500/10 text-sky-300 border-sky-500/25',
+                                    testing: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/25',
+                                    runtime: 'bg-purple-500/10 text-purple-300 border-purple-500/25',
+                                    package_manager: 'bg-slate-500/10 text-slate-300 border-slate-500/25',
+                                    build: 'bg-amber-500/10 text-amber-300 border-amber-500/25',
+                                  };
+                                  const badgeClass = catColors[tech.category] || 'bg-sky-500/10 text-sky-300 border-sky-500/25';
+
+                                  return (
+                                    <div
+                                      key={`tech-${idx}`}
+                                      className="p-2 rounded-xl neu-recessed border border-white/[0.04] flex items-center gap-2 text-xs"
+                                    >
+                                      <span className="font-bold text-white font-mono">{tech.name}</span>
+                                      {tech.version && (
+                                        <span className="font-mono text-[10px] text-slate-400 px-1.5 py-0.5 rounded bg-black/40">
+                                          {tech.version}
                                         </span>
-                                        <span className="text-[10px] text-slate-500 font-mono hidden sm:inline">
-                                          via {tech.detected_from}
-                                        </span>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              ) : (
-                                <p className="text-xs text-slate-500 italic">No standard frameworks or manifests identified.</p>
-                              )}
+                                      )}
+                                      <span className={`text-[10px] font-mono uppercase px-1.5 py-0.5 rounded border ${badgeClass}`}>
+                                        {tech.category}
+                                      </span>
+                                      <span className="text-[10px] text-slate-500 font-mono hidden sm:inline">
+                                        via {tech.detected_from}
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+
+                                {(!repositoryContext.detected_technologies?.length && !repositoryContext.project?.languages?.length) && (
+                                  <p className="text-xs text-slate-500 italic">No standard frameworks or manifests identified.</p>
+                                )}
+                              </div>
                             </div>
 
                             {/* Section 2: GitHub Languages breakdown */}
@@ -789,37 +837,88 @@ export default function PullRequest() {
                               </div>
                             )}
 
-                            {/* Section 3: README Preview (Collapsible) */}
-                            {repositoryContext.readme_preview && (
-                              <div className="rounded-xl neu-recessed border border-white/[0.04] overflow-hidden">
-                                <button
-                                  type="button"
-                                  onClick={() => setReadmeOpen(!readmeOpen)}
-                                  className="w-full p-3.5 flex items-center justify-between text-left hover:bg-white/[0.02] transition-colors"
-                                >
-                                  <div className="flex items-center gap-2.5 text-xs font-mono">
-                                    <BookOpen className="w-4 h-4 text-sky-400" />
-                                    <span className="font-semibold text-white">README.md Preview</span>
-                                    <span className="text-[10px] text-slate-500">
-                                      ({repositoryContext.readme_preview.length} characters)
-                                    </span>
-                                  </div>
-                                  <span className="text-xs text-slate-400 flex items-center gap-1 font-mono">
-                                    {readmeOpen ? 'Hide' : 'View'}
-                                    {readmeOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                            {/* Section 3: Documentation Sources */}
+                            {((repositoryContext.documentation?.files && repositoryContext.documentation.files.length > 0) || repositoryContext.readme_preview) && (
+                              <div className="space-y-2">
+                                <div className="flex items-center gap-2">
+                                  <BookOpen className="w-4 h-4 text-sky-400" />
+                                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-300 font-mono">
+                                    Documentation Sources
+                                  </h4>
+                                  <span className="text-[11px] font-mono text-slate-500">
+                                    ({repositoryContext.documentation?.files?.length || 1} files
+                                    {repositoryContext.documentation?.truncated ? ' • truncated' : ''})
                                   </span>
-                                </button>
+                                </div>
 
-                                {readmeOpen && (
-                                  <div className="p-4 border-t border-white/[0.04] bg-slate-950/60 max-h-60 overflow-y-auto font-mono text-xs text-slate-300 whitespace-pre-wrap leading-relaxed">
-                                    {repositoryContext.readme_preview}
-                                  </div>
+                                {repositoryContext.documentation?.files?.length > 0 ? (
+                                  repositoryContext.documentation.files.map((docFile) => {
+                                    const isDocOpen = Boolean(docPreviewsOpen[docFile.path]);
+                                    return (
+                                      <div
+                                        key={docFile.path}
+                                        className="rounded-xl neu-recessed border border-white/[0.04] overflow-hidden"
+                                      >
+                                        <button
+                                          type="button"
+                                          onClick={() => toggleDocPreview(docFile.path)}
+                                          className="w-full p-3 flex items-center justify-between text-left hover:bg-white/[0.02] transition-colors"
+                                        >
+                                          <div className="flex items-center gap-2.5 text-xs font-mono">
+                                            <FileText className="w-3.5 h-3.5 text-sky-400" />
+                                            <span className="font-semibold text-white">{docFile.path}</span>
+                                            <span className="text-[10px] text-slate-500">
+                                              ({docFile.content?.length || 0} chars{docFile.truncated ? ', capped' : ''})
+                                            </span>
+                                          </div>
+                                          <span className="text-xs text-slate-400 flex items-center gap-1 font-mono">
+                                            {isDocOpen ? 'Hide' : 'View'}
+                                            {isDocOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                                          </span>
+                                        </button>
+
+                                        {isDocOpen && (
+                                          <div className="p-4 border-t border-white/[0.04] bg-slate-950/70 max-h-64 overflow-y-auto font-mono text-xs text-slate-300 whitespace-pre-wrap leading-relaxed">
+                                            {docFile.content}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })
+                                ) : (
+                                  repositoryContext.readme_preview && (
+                                    <div className="rounded-xl neu-recessed border border-white/[0.04] overflow-hidden">
+                                      <button
+                                        type="button"
+                                        onClick={() => setReadmeOpen(!readmeOpen)}
+                                        className="w-full p-3 flex items-center justify-between text-left hover:bg-white/[0.02] transition-colors"
+                                      >
+                                        <div className="flex items-center gap-2.5 text-xs font-mono">
+                                          <FileText className="w-3.5 h-3.5 text-sky-400" />
+                                          <span className="font-semibold text-white">README.md</span>
+                                          <span className="text-[10px] text-slate-500">
+                                            ({repositoryContext.readme_preview.length} chars)
+                                          </span>
+                                        </div>
+                                        <span className="text-xs text-slate-400 flex items-center gap-1 font-mono">
+                                          {readmeOpen ? 'Hide' : 'View'}
+                                          {readmeOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                                        </span>
+                                      </button>
+
+                                      {readmeOpen && (
+                                        <div className="p-4 border-t border-white/[0.04] bg-slate-950/70 max-h-64 overflow-y-auto font-mono text-xs text-slate-300 whitespace-pre-wrap leading-relaxed">
+                                          {repositoryContext.readme_preview}
+                                        </div>
+                                      )}
+                                    </div>
+                                  )
                                 )}
                               </div>
                             )}
 
-                            {/* Section 4: Directory Structure (Collapsible) */}
-                            {repositoryContext.directory_structure && (
+                            {/* Section 4: Repository Structure (Collapsible) */}
+                            {(repositoryContext.structure?.tree || repositoryContext.directory_structure) && (
                               <div className="rounded-xl neu-recessed border border-white/[0.04] overflow-hidden">
                                 <button
                                   type="button"
@@ -828,10 +927,10 @@ export default function PullRequest() {
                                 >
                                   <div className="flex items-center gap-2.5 text-xs font-mono">
                                     <FolderTree className="w-4 h-4 text-sky-400" />
-                                    <span className="font-semibold text-white">Directory Structure</span>
+                                    <span className="font-semibold text-white">Repository Structure</span>
                                     <span className="text-[10px] text-slate-500">
-                                      ({repositoryContext.directory_structure.length} indexed files
-                                      {repositoryContext.tree_truncated ? ' • truncated' : ''})
+                                      ({(repositoryContext.directory_structure?.length || 0)} indexed entries
+                                      {(repositoryContext.structure?.truncated || repositoryContext.tree_truncated) ? ' • truncated' : ''})
                                     </span>
                                   </div>
                                   <span className="text-xs text-slate-400 flex items-center gap-1 font-mono">
@@ -841,13 +940,21 @@ export default function PullRequest() {
                                 </button>
 
                                 {treeOpen && (
-                                  <div className="p-4 border-t border-white/[0.04] bg-slate-950/60 max-h-64 overflow-y-auto font-mono text-xs text-slate-300 space-y-1">
-                                    {repositoryContext.directory_structure.map((fpath, idx) => (
-                                      <div key={idx} className="flex items-center gap-2 py-0.5 hover:text-sky-300 transition-colors">
-                                        <span className="text-slate-600 select-none">#</span>
-                                        <span>{fpath}</span>
+                                  <div className="p-4 border-t border-white/[0.04] bg-slate-950/70 max-h-64 overflow-y-auto font-mono text-xs text-slate-300">
+                                    {repositoryContext.structure?.tree ? (
+                                      <pre className="whitespace-pre font-mono text-[11px] leading-relaxed text-slate-300">
+                                        {repositoryContext.structure.tree}
+                                      </pre>
+                                    ) : (
+                                      <div className="space-y-1">
+                                        {repositoryContext.directory_structure.map((fpath, idx) => (
+                                          <div key={idx} className="flex items-center gap-2 py-0.5 hover:text-sky-300 transition-colors">
+                                            <span className="text-slate-600 select-none">#</span>
+                                            <span>{fpath}</span>
+                                          </div>
+                                        ))}
                                       </div>
-                                    ))}
+                                    )}
                                   </div>
                                 )}
                               </div>

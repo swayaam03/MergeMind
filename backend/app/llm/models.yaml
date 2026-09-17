@@ -1,1 +1,14 @@
-# Model configuration mappings
+# MergeMind per-agent model configurations
+merge_agent:
+  provider: openrouter
+  default_model: openai/gpt-4o-mini
+  local_model: ollama/qwen2.5-coder:7b
+  temperature: 0.1
+  timeout: 60
+
+explanation_agent:
+  provider: openrouter
+  default_model: openai/gpt-4o-mini
+  local_model: ollama/qwen2.5-coder:7b
+  temperature: 0.2
+  timeout: 45

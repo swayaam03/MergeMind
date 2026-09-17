@@ -25,6 +25,8 @@ import {
   ChevronUp,
   Layers,
   Boxes,
+  Copy,
+  Check,
 } from 'lucide-react';
 
 export default function PullRequest() {
@@ -47,6 +49,12 @@ export default function PullRequest() {
   const [treeOpen, setTreeOpen] = useState(false);
   const [filePreviewsOpen, setFilePreviewsOpen] = useState({});
   const [docPreviewsOpen, setDocPreviewsOpen] = useState({});
+
+  // LLM Merge Proposal state (Phase 4 Task 2)
+  const [generatingProposal, setGeneratingProposal] = useState(false);
+  const [proposalData, setProposalData] = useState(null);
+  const [proposalError, setProposalError] = useState(null);
+  const [copiedCode, setCopiedCode] = useState(false);
 
   const toggleDocPreview = (path) => {
     setDocPreviewsOpen((prev) => ({
@@ -182,6 +190,49 @@ export default function PullRequest() {
     } finally {
       setAnalyzing(false);
     }
+  };
+
+  const handleGenerateProposal = async (targetFilePath = null) => {
+    setGeneratingProposal(true);
+    setProposalError(null);
+
+    try {
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
+      let apiUrl = `${backendUrl}/api/github/repositories/${owner}/${repo}/pulls/${pullNumber}/merge-proposal`;
+      if (targetFilePath) {
+        apiUrl += `?file_path=${encodeURIComponent(targetFilePath)}`;
+      }
+
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify(targetFilePath ? { file_path: targetFilePath } : {}),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.detail || 'Unable to generate merge proposal.');
+      }
+
+      setProposalData(data);
+    } catch (err) {
+      console.error('Error generating merge proposal:', err);
+      setProposalError(err.message || 'Failed to generate merge proposal.');
+    } finally {
+      setGeneratingProposal(false);
+    }
+  };
+
+  const handleCopyCode = (code) => {
+    if (!code) return;
+    navigator.clipboard.writeText(code);
+    setCopiedCode(true);
+    setTimeout(() => setCopiedCode(false), 2000);
   };
 
   useEffect(() => {
@@ -539,6 +590,16 @@ export default function PullRequest() {
                                     <span className="text-[11px] font-mono px-2.5 py-1 rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/20">
                                       {c.conflict_type}
                                     </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleGenerateProposal(c.path)}
+                                      disabled={generatingProposal}
+                                      className="neu-button px-2.5 py-1 rounded-md text-[11px] font-mono text-violet-300 hover:text-white bg-violet-500/10 hover:bg-violet-500/20 border border-violet-500/30 flex items-center gap-1 transition-colors disabled:opacity-50"
+                                      title={`Generate LLM proposal for ${c.path}`}
+                                    >
+                                      <Sparkles className="w-3 h-3 text-violet-400" />
+                                      <span>Propose Fix</span>
+                                    </button>
                                   </div>
                                 </div>
 
@@ -1030,6 +1091,231 @@ export default function PullRequest() {
                                 </p>
                               )}
                             </div>
+
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* MergeMind AI Merge Proposal Card (Phase 4 Task 2) */}
+                    {(conflictData || proposalData || generatingProposal) && (
+                      <div className="neu-panel rounded-2xl p-6 sm:p-7 border border-violet-500/20 bg-gradient-to-b from-violet-950/10 to-transparent shadow-[0_15px_40px_rgba(0,0,0,0.5)] space-y-6">
+                        {/* Header */}
+                        <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-white/[0.06]">
+                          <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-xl bg-violet-500/15 border border-violet-500/30 flex items-center justify-center text-violet-300">
+                              <Sparkles className="w-5 h-5" />
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <h3 className="text-base sm:text-lg font-bold text-white">
+                                  MergeMind Proposal
+                                </h3>
+                                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-violet-500/20 text-violet-300 border border-violet-500/30 font-semibold">
+                                  LLM Agent
+                                </span>
+                              </div>
+                              <p className="text-xs text-slate-400 mt-0.5">
+                                Semantic conflict resolution synthesized from AST analysis and repository context
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleGenerateProposal()}
+                              disabled={generatingProposal}
+                              className="neu-button px-4 py-2 rounded-xl text-xs font-semibold text-white bg-violet-600/30 hover:bg-violet-600/50 border border-violet-500/40 flex items-center gap-2 transition-all disabled:opacity-50 shadow-lg shadow-violet-950/40"
+                              title="Generate semantic merge proposal"
+                            >
+                              {generatingProposal ? (
+                                <>
+                                  <Loader2 className="w-4 h-4 text-violet-300 animate-spin" />
+                                  <span>Reasoning...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Sparkles className="w-4 h-4 text-violet-300" />
+                                  <span>{proposalData ? 'Regenerate Proposal' : 'Generate Merge Proposal'}</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Prominent Verification Notice */}
+                        <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-start gap-2.5">
+                          <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+                          <div>
+                            <p className="text-xs font-bold text-amber-300">
+                              AI-generated proposal — not yet verified
+                            </p>
+                            <p className="text-[11px] text-amber-400/80 mt-0.5 leading-relaxed">
+                              This resolution was generated by the LLM merge agent. Verification inside a Docker sandbox and Semgrep security scanning are executed in subsequent pipeline stages before any merge decision.
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Loading State */}
+                        {generatingProposal && (
+                          <div className="p-8 rounded-xl neu-recessed border border-white/[0.04] text-center space-y-3">
+                            <Loader2 className="w-6 h-6 text-violet-400 animate-spin mx-auto" />
+                            <p className="text-xs text-slate-300 font-medium">
+                              Analyzing Base, Local, and Remote changes with LLM Merge Agent...
+                            </p>
+                            <p className="text-[11px] text-slate-500 font-mono">
+                              Using LiteLLM to synthesize intent and preserve changes
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Error State */}
+                        {!generatingProposal && proposalError && (
+                          <div className="p-4 rounded-xl bg-rose-950/30 border border-rose-500/30 flex items-start gap-3">
+                            <AlertCircle className="w-4 h-4 text-rose-400 flex-shrink-0 mt-0.5" />
+                            <div className="flex-1">
+                              <p className="text-xs font-semibold text-rose-300">
+                                Merge proposal generation failed
+                              </p>
+                              <p className="text-xs text-rose-400/90 leading-relaxed mt-0.5">
+                                {proposalError}
+                              </p>
+                            </div>
+                            <button
+                              onClick={() => handleGenerateProposal()}
+                              className="text-xs text-rose-300 hover:text-white underline font-medium"
+                            >
+                              Retry
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Proposal Results */}
+                        {!generatingProposal && proposalData && (
+                          <div className="space-y-5">
+                            {/* Status & Metadata Header */}
+                            <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-xl neu-recessed border border-white/[0.05]">
+                              <div className="flex items-center gap-2.5">
+                                <span className="text-xs text-slate-400 font-mono">Status:</span>
+                                <span
+                                  className={`text-xs font-mono font-bold px-2.5 py-1 rounded-md border ${
+                                    proposalData.status === 'resolved'
+                                      ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                                      : 'bg-rose-500/15 text-rose-300 border-rose-500/30'
+                                  }`}
+                                >
+                                  {proposalData.status.toUpperCase()}
+                                </span>
+                                {proposalData.file_path && (
+                                  <span className="text-xs font-mono text-white font-semibold">
+                                    {proposalData.file_path}
+                                  </span>
+                                )}
+                              </div>
+
+                              {proposalData.model && (
+                                <div className="flex items-center gap-1.5 text-[11px] font-mono text-slate-400">
+                                  <span>Model:</span>
+                                  <span className="text-sky-300 bg-white/[0.04] px-2 py-0.5 rounded border border-white/[0.06]">
+                                    {proposalData.model}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Explanation Section */}
+                            {proposalData.explanation && (
+                              <div className="p-4 rounded-xl neu-recessed border border-white/[0.04] space-y-1.5">
+                                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-300 font-mono">
+                                  Agent Explanation
+                                </h4>
+                                <p className="text-xs text-slate-300 leading-relaxed">
+                                  {proposalData.explanation}
+                                </p>
+                              </div>
+                            )}
+
+                            {/* Preserved Changes */}
+                            {proposalData.preserved_changes && proposalData.preserved_changes.length > 0 && (
+                              <div className="p-4 rounded-xl neu-recessed border border-emerald-500/10 bg-emerald-950/10 space-y-2">
+                                <div className="flex items-center gap-2">
+                                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                                  <h4 className="text-xs font-bold uppercase tracking-wider text-emerald-300 font-mono">
+                                    Preserved Intent & Changes
+                                  </h4>
+                                </div>
+                                <ul className="space-y-1 text-xs text-slate-300">
+                                  {proposalData.preserved_changes.map((item, idx) => (
+                                    <li key={idx} className="flex items-start gap-2">
+                                      <span className="text-emerald-400 select-none">•</span>
+                                      <span>{item}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+
+                            {/* Risks & Edge Cases */}
+                            {proposalData.risks && proposalData.risks.length > 0 && (
+                              <div className="p-4 rounded-xl neu-recessed border border-amber-500/10 bg-amber-950/10 space-y-2">
+                                <div className="flex items-center gap-2">
+                                  <AlertTriangle className="w-4 h-4 text-amber-400" />
+                                  <h4 className="text-xs font-bold uppercase tracking-wider text-amber-300 font-mono">
+                                    Identified Risks & Caveats
+                                  </h4>
+                                </div>
+                                <ul className="space-y-1 text-xs text-slate-300">
+                                  {proposalData.risks.map((risk, idx) => (
+                                    <li key={idx} className="flex items-start gap-2">
+                                      <span className="text-amber-400 select-none">•</span>
+                                      <span>{risk}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+
+                            {/* Proposed Merged Code View */}
+                            {proposalData.merged_code ? (
+                              <div className="rounded-xl neu-recessed border border-white/[0.06] overflow-hidden">
+                                <div className="p-3.5 flex items-center justify-between border-b border-white/[0.04] bg-white/[0.02]">
+                                  <div className="flex items-center gap-2">
+                                    <FileCode className="w-4 h-4 text-violet-400" />
+                                    <span className="text-xs font-mono font-semibold text-white">
+                                      Proposed Merged Code
+                                    </span>
+                                  </div>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => handleCopyCode(proposalData.merged_code)}
+                                    className="neu-button px-2.5 py-1 rounded-lg text-xs font-mono text-slate-300 hover:text-white flex items-center gap-1.5 transition-colors"
+                                  >
+                                    {copiedCode ? (
+                                      <>
+                                        <Check className="w-3.5 h-3.5 text-emerald-400" />
+                                        <span className="text-emerald-400">Copied</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Copy className="w-3.5 h-3.5 text-slate-400" />
+                                        <span>Copy code</span>
+                                      </>
+                                    )}
+                                  </button>
+                                </div>
+
+                                <div className="p-4 bg-slate-950/80 max-h-96 overflow-y-auto overflow-x-auto">
+                                  <pre className="font-mono text-xs text-slate-200 whitespace-pre leading-relaxed">
+                                    {proposalData.merged_code}
+                                  </pre>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="p-4 rounded-xl neu-recessed border border-white/[0.04] text-xs text-slate-400 text-center italic">
+                                No resolved code produced. Status is unresolved.
+                              </div>
+                            )}
 
                           </div>
                         )}

@@ -30,6 +30,14 @@ class Settings(BaseSettings):
     MERGEMIND_MAX_TREE_ENTRIES: int = 500
     MERGEMIND_MAX_RELEVANT_FILES: int = 10
 
+    # LLM Merge Agent Configuration (LiteLLM / OpenRouter)
+    LLM_PROVIDER: str = "openrouter"
+    LLM_MODEL: str = "openai/gpt-4o-mini"
+    OPENROUTER_API_KEY: str = ""
+    LLM_TEMPERATURE: float = 0.1
+    LLM_TIMEOUT_SECONDS: int = 60
+    MERGEMIND_RUN_LLM_INTEGRATION_TESTS: bool = False
+
     @property
     def github_installation_url(self) -> str:
         """Construct the GitHub App installation URL."""

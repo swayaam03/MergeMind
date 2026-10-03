@@ -14,8 +14,12 @@ import {
   ShieldCheck,
   AlertCircle,
   Loader2,
+  ExternalLink,
+  PlusCircle,
+  HelpCircle,
+  Check,
 } from 'lucide-react';
-import { checkGitHubStatus } from '../services/github';
+import { checkGitHubStatus, fetchAllInstallations } from '../services/github';
 import {
   fetchCurrentUser,
   logoutUser,
@@ -39,66 +43,104 @@ export default function ConnectPage() {
   const navigate = useNavigate();
   const [currentUser, setCurrentUser] = useState(null);
   const [alreadyConnected, setAlreadyConnected] = useState(false);
+  const [activeInstallId, setActiveInstallId] = useState(null);
   const [repoCount, setRepoCount] = useState(null);
-  const [manualInstallId, setManualInstallId] = useState('167531148');
+  const [allInstallations, setAllInstallations] = useState([]);
+  const [manualInstallId, setManualInstallId] = useState('');
   const [linking, setLinking] = useState(false);
   const [linkError, setLinkError] = useState(null);
 
   const loadStatusAndUser = async () => {
-    // 1. Check if user is logged in
+    // 1. Check current logged-in user profile
     const user = await fetchCurrentUser();
     if (user) {
       setCurrentUser(user);
       if (user.is_github_connected) {
         setAlreadyConnected(true);
+        setActiveInstallId(user.github_installation_id);
         setRepoCount(user.repository_count);
       }
     }
 
-    // 2. Check general GitHub status via cookie
+    // 2. Check general status via API
     const status = await checkGitHubStatus();
     if (status && status.connected) {
       setAlreadyConnected(true);
+      if (status.installation_id) {
+        setActiveInstallId(status.installation_id);
+      }
       if (typeof status.repository_count === 'number') {
         setRepoCount(status.repository_count);
       }
     }
+
+    // 3. Fetch all active app installations across accounts
+    const installations = await fetchAllInstallations();
+    setAllInstallations(installations);
   };
 
   useEffect(() => {
-    // Check if GitHub redirected back with installation_id query param
-    const params = new URLSearchParams(window.location.search);
-    const installId = params.get('installation_id');
-    if (installId) {
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
-      window.location.href = `${backendUrl}/api/github/setup?installation_id=${installId}`;
-      return;
-    }
+    const handleInitialLoad = async () => {
+      // Check if GitHub redirected back with installation_id query param
+      const params = new URLSearchParams(window.location.search);
+      const installId = params.get('installation_id');
 
-    loadStatusAndUser();
+      if (installId) {
+        setLinking(true);
+        try {
+          // Link new installation directly to current user account
+          await connectGitHubInstallation(installId);
+          // Sync cookie on backend
+          const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
+          await fetch(`${backendUrl}/api/github/setup?installation_id=${installId}`, {
+            credentials: 'include',
+          }).catch(() => {});
+
+          // Clean URL parameter without reloading
+          window.history.replaceState({}, document.title, window.location.pathname);
+          navigate('/repositories');
+          return;
+        } catch (err) {
+          console.error('Failed auto-linking redirected installation:', err);
+          setLinkError(err.message || 'Failed to link GitHub installation.');
+        } finally {
+          setLinking(false);
+        }
+      }
+
+      await loadStatusAndUser();
+    };
+
+    handleInitialLoad();
   }, []);
+
+  const handleSwitchInstallation = async (targetId) => {
+    if (!targetId) return;
+    setLinking(true);
+    setLinkError(null);
+
+    try {
+      if (currentUser) {
+        await connectGitHubInstallation(targetId);
+      }
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
+      await fetch(`${backendUrl}/api/github/setup?installation_id=${targetId}`, {
+        credentials: 'include',
+      }).catch(() => {});
+
+      await loadStatusAndUser();
+      navigate('/repositories');
+    } catch (err) {
+      setLinkError(err.message || 'Failed to switch GitHub installation.');
+    } finally {
+      setLinking(false);
+    }
+  };
 
   const handleManualLink = async (e) => {
     e.preventDefault();
     if (!manualInstallId) return;
-    setLinking(true);
-    setLinkError(null);
-    try {
-      if (currentUser) {
-        await connectGitHubInstallation(manualInstallId);
-      } else {
-        // Direct setup redirect to establish cookie
-        const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
-        window.location.href = `${backendUrl}/api/github/setup?installation_id=${manualInstallId}`;
-        return;
-      }
-      await loadStatusAndUser();
-      navigate('/repositories');
-    } catch (err) {
-      setLinkError(err.message || 'Failed to link GitHub installation.');
-    } finally {
-      setLinking(false);
-    }
+    await handleSwitchInstallation(manualInstallId);
   };
 
   const handleDisconnect = async () => {
@@ -108,6 +150,7 @@ export default function ConnectPage() {
         await disconnectGitHub();
       }
       setAlreadyConnected(false);
+      setActiveInstallId(null);
       setRepoCount(null);
       await loadStatusAndUser();
     } catch (err) {
@@ -119,6 +162,7 @@ export default function ConnectPage() {
     await logoutUser();
     setCurrentUser(null);
     setAlreadyConnected(false);
+    setActiveInstallId(null);
   };
 
   return (
@@ -181,17 +225,15 @@ export default function ConnectPage() {
             </div>
 
             <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-white tracking-tight">
-              Connect your GitHub
+              GitHub App Connection
             </h1>
 
             <p className="mt-3.5 text-sm sm:text-base text-slate-400 leading-relaxed max-w-xl mx-auto font-normal">
-              {currentUser
-                ? `Logged in as ${currentUser.username}. Link your GitHub App to access repositories and monitor conflicts.`
-                : 'Connect your GitHub account to let MergeMind discover your repositories and resolve merge conflicts.'}
+              Connect your personal or organization GitHub accounts to monitor repositories for semantic merge conflicts.
             </p>
           </div>
 
-          {/* Connected Alert Banner */}
+          {/* Active Connection Banner */}
           {alreadyConnected && (
             <div className="mb-8 p-4 sm:p-5 rounded-2xl neu-panel border border-emerald-500/30 bg-emerald-950/10 flex flex-col sm:flex-row items-center justify-between gap-4 animate-in fade-in slide-in-from-top-2 duration-300">
               <div className="flex items-center gap-3.5">
@@ -200,15 +242,15 @@ export default function ConnectPage() {
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <h4 className="text-sm font-semibold text-white">GitHub App Connected</h4>
+                    <h4 className="text-sm font-semibold text-white">Active GitHub Connection</h4>
                     <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
-                      Active
+                      Active #{activeInstallId}
                     </span>
                   </div>
                   <p className="text-xs text-slate-400 mt-0.5">
                     {currentUser?.github_username
                       ? `Connected to GitHub account @${currentUser.github_username}`
-                      : 'Installation verified'}
+                      : `Installation ID ${activeInstallId}`}
                     {repoCount ? ` with access to ${repoCount} repository(ies).` : '.'}
                   </p>
                 </div>
@@ -225,47 +267,151 @@ export default function ConnectPage() {
                   to="/repositories"
                   className="flex-1 sm:flex-none neu-glow-btn px-5 py-2.5 rounded-xl text-xs font-semibold text-white flex items-center justify-center gap-2 group"
                 >
-                  <span>Go to Repositories</span>
+                  <span>View Repositories</span>
                   <ArrowRight className="w-3.5 h-3.5 text-sky-300 group-hover:translate-x-1 transition-transform" />
                 </Link>
               </div>
             </div>
           )}
 
-          {/* Quick Manual Installation Link Banner (for instant connection) */}
-          {!alreadyConnected && (
-            <div className="mb-8 p-5 rounded-2xl neu-panel border border-sky-500/20 bg-sky-950/10 flex flex-col sm:flex-row items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl neu-recessed flex items-center justify-center text-sky-400 flex-shrink-0 border border-sky-400/20">
-                  <Github className="w-5 h-5 text-sky-400" />
-                </div>
+          {/* Connected GitHub Accounts & Installations Switcher */}
+          {allInstallations.length > 0 && (
+            <div className="mb-8 p-6 rounded-2xl neu-panel border border-white/[0.08] shadow-[0_15px_35px_rgba(0,0,0,0.5)]">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 pb-3 border-b border-white/[0.04]">
                 <div>
-                  <h4 className="text-xs sm:text-sm font-semibold text-white">Already installed on GitHub?</h4>
-                  <p className="text-xs text-slate-400">
-                    Link your active GitHub installation ID (<code className="text-sky-300 font-mono">167531148</code>) directly to your account.
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    <GithubIcon className="w-4 h-4 text-sky-400" />
+                    <span>Connected GitHub Accounts</span>
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Select which GitHub account or organization workspace you want to monitor.
                   </p>
                 </div>
+
+                <a
+                  href="https://github.com/apps/mergemindd/installations/new"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="neu-button px-3.5 py-1.5 rounded-xl text-xs font-medium text-sky-300 hover:text-white flex items-center gap-1.5 self-start sm:self-auto transition-colors"
+                >
+                  <PlusCircle className="w-3.5 h-3.5 text-sky-400" />
+                  <span>Install on Another GitHub ID</span>
+                  <ExternalLink className="w-3 h-3 text-slate-500" />
+                </a>
               </div>
 
-              <form onSubmit={handleManualLink} className="flex items-center gap-2 w-full sm:w-auto">
-                <input
-                  type="number"
-                  value={manualInstallId}
-                  onChange={(e) => setManualInstallId(e.target.value)}
-                  placeholder="Installation ID"
-                  className="px-3 py-1.5 rounded-lg bg-black/40 border border-white/10 text-xs font-mono text-white placeholder-slate-500 focus:border-sky-500 outline-none w-36"
-                />
-                <button
-                  type="submit"
-                  disabled={linking || !manualInstallId}
-                  className="neu-glow-btn px-4 py-2 rounded-lg text-xs font-semibold text-white flex items-center gap-1.5 disabled:opacity-50"
-                >
-                  {linking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <LinkIcon className="w-3.5 h-3.5" />}
-                  <span>Link ID</span>
-                </button>
-              </form>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                {allInstallations.map((inst) => {
+                  const isActive = Number(inst.id) === Number(activeInstallId);
+                  return (
+                    <div
+                      key={inst.id}
+                      className={`p-3.5 rounded-xl border flex items-center justify-between gap-3 transition-all ${
+                        isActive
+                          ? 'bg-sky-950/20 border-sky-500/40 shadow-[0_0_20px_rgba(14,165,233,0.15)]'
+                          : 'neu-recessed border-white/[0.04] hover:border-white/[0.1]'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        {inst.avatar_url ? (
+                          <img
+                            src={inst.avatar_url}
+                            alt={inst.account_login}
+                            className="w-9 h-9 rounded-xl border border-white/10"
+                          />
+                        ) : (
+                          <div className="w-9 h-9 rounded-xl neu-panel flex items-center justify-center text-slate-400">
+                            <User className="w-4 h-4" />
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs font-bold text-white truncate">
+                              @{inst.account_login}
+                            </span>
+                            <span className="text-[10px] font-mono text-slate-500">
+                              ({inst.account_type})
+                            </span>
+                          </div>
+                          <div className="text-[10px] font-mono text-slate-400">
+                            ID: <code className="text-slate-300">{inst.id}</code>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div>
+                        {isActive ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-mono text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-lg border border-emerald-500/20">
+                            <Check className="w-3 h-3" />
+                            Active
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleSwitchInstallation(inst.id)}
+                            disabled={linking}
+                            className="neu-button px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-200 hover:text-white flex items-center gap-1.5 transition-colors disabled:opacity-50"
+                          >
+                            <span>Switch</span>
+                            <ArrowRight className="w-3 h-3 text-sky-400" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
+
+          {/* GitHub Multi-Account Setup Guidance Card */}
+          <div className="mb-8 p-4 sm:p-5 rounded-2xl bg-indigo-950/10 border border-indigo-500/20 flex items-start gap-3.5">
+            <HelpCircle className="w-5 h-5 text-indigo-400 flex-shrink-0 mt-0.5" />
+            <div className="text-xs leading-relaxed text-slate-300 space-y-1">
+              <h4 className="font-semibold text-white">Installing on a Different GitHub Account?</h4>
+              <p className="text-slate-400">
+                If GitHub says <em>"This app can only be installed on the account that owns it"</em>, your GitHub App needs public installation permissions:
+              </p>
+              <ol className="list-decimal list-inside text-slate-400 space-y-0.5 pt-1">
+                <li>Log in to GitHub as the app creator (<code className="text-sky-300">swayaam03</code>).</li>
+                <li>Go to <strong>Settings → Developer settings → GitHub Apps → MergeMindd → Advanced</strong>.</li>
+                <li>Under <strong>"Where can this GitHub App be installed?"</strong>, select <strong>"Any account" (Public)</strong> and save.</li>
+              </ol>
+            </div>
+          </div>
+
+          {/* Quick Manual Installation Link Form */}
+          <div className="mb-8 p-5 rounded-2xl neu-panel border border-white/[0.06] flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl neu-recessed flex items-center justify-center text-sky-400 flex-shrink-0 border border-sky-400/20">
+                <LinkIcon className="w-4 h-4 text-sky-400" />
+              </div>
+              <div>
+                <h4 className="text-xs sm:text-sm font-semibold text-white">Manual Installation Link</h4>
+                <p className="text-xs text-slate-400">
+                  Have a specific GitHub installation ID from another organization? Enter it below.
+                </p>
+              </div>
+            </div>
+
+            <form onSubmit={handleManualLink} className="flex items-center gap-2 w-full sm:w-auto">
+              <input
+                type="number"
+                value={manualInstallId}
+                onChange={(e) => setManualInstallId(e.target.value)}
+                placeholder="e.g. 167531148"
+                className="px-3 py-1.5 rounded-lg bg-black/40 border border-white/10 text-xs font-mono text-white placeholder-slate-500 focus:border-sky-500 outline-none w-40"
+              />
+              <button
+                type="submit"
+                disabled={linking || !manualInstallId}
+                className="neu-glow-btn px-4 py-2 rounded-lg text-xs font-semibold text-white flex items-center gap-1.5 disabled:opacity-50"
+              >
+                {linking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <LinkIcon className="w-3.5 h-3.5" />}
+                <span>Connect ID</span>
+              </button>
+            </form>
+          </div>
 
           {linkError && (
             <div className="mb-6 p-4 rounded-xl bg-rose-950/30 border border-rose-500/30 flex items-center gap-3">

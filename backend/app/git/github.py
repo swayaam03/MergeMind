@@ -231,6 +231,50 @@ def verify_installation(
     return repo_names
 
 
+def list_all_app_installations(client: httpx.Client | None = None) -> list[dict[str, Any]]:
+    """
+    List all active installations of the GitHub App across all accounts/organizations.
+    Uses the GitHub App JWT to query GET /app/installations.
+    """
+    jwt = generate_jwt()
+    headers = {
+        "Authorization": f"Bearer {jwt}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": GITHUB_API_VERSION,
+    }
+
+    should_close = False
+    if client is None:
+        client = httpx.Client(timeout=15.0)
+        should_close = True
+
+    try:
+        response = client.get(f"{GITHUB_API_BASE}/app/installations", headers=headers)
+        if response.status_code != 200:
+            raise GitHubAPIError("Failed to list GitHub App installations", status_code=response.status_code)
+
+        data = response.json()
+        installations = []
+        for inst in data:
+            acc = inst.get("account") or {}
+            installations.append({
+                "id": inst["id"],
+                "account_login": acc.get("login", ""),
+                "account_type": acc.get("type", "User"),
+                "avatar_url": acc.get("avatar_url", ""),
+                "repository_selection": inst.get("repository_selection", "all"),
+                "html_url": inst.get("html_url", ""),
+                "target_id": inst.get("target_id"),
+            })
+        return installations
+    except httpx.RequestError as exc:
+        raise GitHubAPIError(f"Network error querying GitHub App installations: {exc}") from exc
+    finally:
+        if should_close:
+            client.close()
+
+
+
 def list_repositories_for_installation(
     installation_id: int,
     client: httpx.Client | None = None,

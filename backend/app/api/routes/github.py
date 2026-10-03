@@ -8,6 +8,7 @@ from app.git.github import (
     GitHubAPIError,
     GitHubAuthError,
     GitHubConfigError,
+    list_all_app_installations,
     list_repositories_for_installation,
     verify_installation,
 )
@@ -267,6 +268,7 @@ def get_github_status(
         repos = list_repositories_for_installation(target_installation_id)
         return {
             "connected": True,
+            "installation_id": target_installation_id,
             "repository_count": len(repos),
         }
     except (GitHubConfigError, GitHubAuthError, GitHubAPIError) as exc:
@@ -282,6 +284,21 @@ def get_github_status(
             target_installation_id,
         )
         return {"connected": False}
+
+
+@router.get("/installations")
+def get_all_installations():
+    """
+    List all active installations of the MergeMind GitHub App across accounts.
+    Allows users to see all connected GitHub accounts and switch between them.
+    """
+    try:
+        installations = list_all_app_installations()
+        return {"installations": installations}
+    except Exception as exc:
+        logger.error("Failed to list GitHub App installations: %s", exc)
+        return {"installations": []}
+
 
 
 @router.get("/repositories")

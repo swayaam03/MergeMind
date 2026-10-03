@@ -223,15 +223,13 @@ export default function Repositories() {
                 <RefreshCw className="w-3.5 h-3.5 text-sky-400" />
                 <span>Try Again</span>
               </button>
-              <button
-                onClick={() => {
-                  const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
-                  window.location.href = `${backendUrl}/api/github/setup?installation_id=167531148`;
-                }}
+              <Link
+                to="/connect"
                 className="neu-glow-btn px-5 py-2.5 rounded-xl text-xs font-semibold text-white flex items-center gap-2"
               >
-                <span>Link Active App (167531148)</span>
-              </button>
+                <PlusCircle className="w-4 h-4 text-sky-300" />
+                <span>Manage / Switch GitHub Accounts</span>
+              </Link>
               <Link
                 to="/connect"
                 className="neu-button px-5 py-2.5 rounded-xl text-xs font-medium text-slate-300 hover:text-white flex items-center gap-2"

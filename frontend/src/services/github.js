@@ -28,3 +28,18 @@ export async function checkGitHubStatus() {
     return { connected: false };
   }
 }
+
+/**
+ * Fetch all active installations of the MergeMind GitHub App.
+ * Returns: Array of { id, account_login, account_type, avatar_url, html_url }
+ */
+export async function fetchAllInstallations() {
+  try {
+    const data = await apiJson('/api/github/installations');
+    return data.installations || [];
+  } catch (err) {
+    console.error('Error fetching GitHub App installations:', err);
+    return [];
+  }
+}
+

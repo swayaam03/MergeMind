@@ -144,4 +144,4 @@ mergemind/
 
 ## 9. Team
 
-Aarushi Arora, Dhvani Mistry, Prishita Mali, Swayam Kandarkar — St. Francis Institute of Technology, Dept. of Information Technology.
+ Swayam Kandarkar, Prishita Mali, Dhvani Mistry, Aarushi Arora— St. Francis Institute of Technology, Dept. of Information Technology.

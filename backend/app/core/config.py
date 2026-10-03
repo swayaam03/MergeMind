@@ -38,6 +38,18 @@ class Settings(BaseSettings):
     LLM_TIMEOUT_SECONDS: int = 60
     MERGEMIND_RUN_LLM_INTEGRATION_TESTS: bool = False
 
+    # Docker Sandbox Verification Settings (Phase 5)
+    SANDBOX_TIMEOUT_SECONDS: int = 45
+    SANDBOX_CPU_LIMIT: float = 1.0
+    SANDBOX_MEMORY_LIMIT: str = "512m"
+    SANDBOX_PIDS_LIMIT: int = 100
+    SANDBOX_NETWORK_MODE: str = "none"
+    SANDBOX_AUTO_REMOVE: bool = True
+    SANDBOX_IMAGE_PYTHON: str = "python:3.11-slim"
+    SANDBOX_IMAGE_JAVASCRIPT: str = "node:20-slim"
+    SANDBOX_IMAGE_JAVA: str = "openjdk:17-slim"
+    SANDBOX_MAX_LOG_OUTPUT_BYTES: int = 500_000
+
     @property
     def github_installation_url(self) -> str:
         """Construct the GitHub App installation URL."""

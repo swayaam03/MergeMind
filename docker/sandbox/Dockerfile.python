@@ -1,1 +1,28 @@
-# Python sandbox Dockerfile
+# MergeMind Python Sandbox
+# Minimal, locked-down execution container for Python verification
+FROM python:3.11-slim
+
+# Prevent writing .pyc files and unbuffer output
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    CI=true \
+    DEBIAN_FRONTEND=noninteractive
+
+# Install essential deterministic verification dependencies
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends git curl && \
+    pip install --no-cache-dir pytest semgrep && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# Create unprivileged non-root user
+RUN groupadd -g 1000 sandbox && \
+    useradd -u 1000 -g sandbox -m -s /bin/bash sandbox
+
+# Set up isolated workspace directory
+WORKDIR /workspace
+RUN chown -R sandbox:sandbox /workspace
+
+USER sandbox
+
+CMD ["pytest"]

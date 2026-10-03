@@ -277,9 +277,9 @@ Structured Result
 -   [x] Execute project tests.
 -   [x] Capture stdout/stderr.
 -   [x] Create structured test result.
--   [ ] Integrate Semgrep.
--   [ ] Create structured security result.
--   [ ] Detect security findings.
+-   [x] Integrate Semgrep.
+-   [x] Create structured security result.
+-   [x] Detect security findings.
 -   [ ] Connect verification results to pipeline state.
 
 ### Phase Completion Condition

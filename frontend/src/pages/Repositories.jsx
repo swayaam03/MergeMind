@@ -25,13 +25,20 @@ export default function Repositories() {
     setError(null);
 
     try {
+      const params = new URLSearchParams(window.location.search);
+      const installId = params.get('installation_id');
+
       const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
-      const apiUrl = `${backendUrl}/api/github/repositories`;
+      let apiUrl = `${backendUrl}/api/github/repositories`;
+      if (installId) {
+        apiUrl += `?installation_id=${encodeURIComponent(installId)}`;
+      }
 
       const response = await fetch(apiUrl, {
         method: 'GET',
         headers: {
           Accept: 'application/json',
+          ...(installId ? { 'X-Installation-Id': installId } : {}),
         },
         credentials: 'include',
       });

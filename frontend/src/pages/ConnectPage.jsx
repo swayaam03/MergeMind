@@ -11,6 +11,14 @@ export default function ConnectPage() {
   const [repoCount, setRepoCount] = useState(null);
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const installId = params.get('installation_id');
+    if (installId) {
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
+      window.location.href = `${backendUrl}/api/github/setup?installation_id=${installId}`;
+      return;
+    }
+
     let isMounted = true;
     checkGitHubStatus().then((status) => {
       if (isMounted && status && status.connected) {

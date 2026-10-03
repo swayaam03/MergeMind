@@ -55,6 +55,33 @@ class ProposedWorkspaceInfo(BaseModel):
     replaced_file_size: int = Field(default=0, description="Size in bytes of the applied merged code")
 
 
+SecuritySeverity = Literal["ERROR", "WARNING", "INFO"]
+
+
+class SecurityFinding(BaseModel):
+    """A detected security vulnerability or regression from static analysis."""
+
+    rule_id: str = Field(..., description="Unique Semgrep rule ID or check identifier")
+    message: str = Field(..., description="Explanation of the vulnerability and risk")
+    severity: SecuritySeverity = Field(..., description="Severity level: ERROR (critical/high), WARNING, or INFO")
+    file_path: str = Field(..., description="Relative path of the flagged file")
+    line_number: int = Field(..., description="Starting line number of the flagged code")
+    column_number: Optional[int] = Field(default=None, description="Starting column number if available")
+    code_snippet: Optional[str] = Field(default=None, description="Relevant code snippet that triggered the rule")
+    fix_recommendation: Optional[str] = Field(default=None, description="Recommended remediation action")
+
+
+class SecurityScanReport(BaseModel):
+    """Comprehensive report from security scanning stage."""
+
+    findings: List[SecurityFinding] = Field(default_factory=list, description="List of detected security findings")
+    error_count: int = Field(default=0, description="Number of blocking ERROR severity findings")
+    warning_count: int = Field(default=0, description="Number of non-blocking WARNING severity findings")
+    info_count: int = Field(default=0, description="Number of informational findings")
+    status: VerificationStageStatus = Field(..., description="PASS if no ERROR findings, FAIL otherwise")
+    summary: str = Field(..., description="Concise human-readable summary of the security audit")
+
+
 class StageResult(BaseModel):
     """Verification result for an individual deterministic stage."""
 

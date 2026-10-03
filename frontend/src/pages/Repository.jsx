@@ -30,10 +30,12 @@ export default function Repository() {
       const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
       const apiUrl = `${backendUrl}/api/github/repositories/${owner}/${repo}/pulls`;
 
+      const token = localStorage.getItem('mergemind_token');
       const response = await fetch(apiUrl, {
         method: 'GET',
         headers: {
           Accept: 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}`, 'X-Session-Token': token } : {}),
         },
         credentials: 'include',
       });

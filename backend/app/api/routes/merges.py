@@ -1,13 +1,20 @@
 """API routes for LLM merge proposal generation."""
 
 import logging
+import tempfile
+from pathlib import Path
 from typing import Any, Dict, Optional
 from fastapi import APIRouter, Body, Cookie, Header, HTTPException, Query, Request, status
+from pydantic import BaseModel, Field
 
 from app.api.routes.pull_requests import resolve_installation_id
 from app.ast import analyze_conflicted_file
 from app.context.extractor import extract_repository_context
-from app.git.conflicts import GitConflictError, simulate_merge_and_extract_conflicts
+from app.git.conflicts import (
+    GitConflictError,
+    checkout_pr_baseline,
+    simulate_merge_and_extract_conflicts,
+)
 from app.git.github import (
     GitHubAPIError,
     GitHubAuthError,
@@ -25,6 +32,8 @@ from app.llm.client import (
 )
 from app.llm.merge_agent import MergeAgent
 from app.llm.schemas import MergeProposal, MergeProposalRequest
+from app.pipeline.verifier import verify_merge_proposal
+from app.schemas.verification import LanguageType, VerificationReport
 
 logger = logging.getLogger(__name__)
 
@@ -263,3 +272,112 @@ async def generate_merge_proposal(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error while generating merge proposal.",
         ) from exc
+
+
+class VerifyProposalRequest(BaseModel):
+    """Payload for deterministic verification of a proposed merge."""
+
+    target_file: str = Field(..., description="Path of conflicted file being verified")
+    merged_code: str = Field(..., description="Proposed resolved merged code")
+    language: Optional[LanguageType] = Field(default=None, description="Optional language hint")
+
+
+@router.post(
+    "/repositories/{owner}/{repo}/pulls/{pull_number}/verify-proposal",
+    response_model=VerificationReport,
+)
+def verify_proposal(
+    owner: str,
+    repo: str,
+    pull_number: int,
+    request: Request,
+    body: VerifyProposalRequest = Body(...),
+    installation_id_cookie: Optional[str] = Cookie(
+        default=None,
+        alias="installation_id",
+        description="GitHub App installation ID stored in HttpOnly cookie",
+    ),
+    installation_id_query: Optional[int] = Query(
+        default=None,
+        alias="installation_id",
+        description="Optional installation ID override for testing or direct API clients",
+    ),
+    installation_id_header: Optional[str] = Header(
+        default=None,
+        alias="x-installation-id",
+        description="Optional installation ID provided via HTTP header",
+    ),
+) -> VerificationReport:
+    """
+    Execute 4-stage deterministic verification on a proposed merge resolution.
+
+    Verification Stages:
+    1. Syntax Validation: AST / compiler check on target file
+    2. Build / Compilation: Language-specific build check
+    3. Test Execution: Existing test suite run inside locked-down sandbox
+    4. Security Audit: Semgrep and AST static analysis for sinks and secrets
+
+    ZERO LLMs are called during verification.
+    """
+    target_installation_id = resolve_installation_id(
+        request=request,
+        installation_id_cookie=installation_id_cookie,
+        installation_id_header=installation_id_header,
+        installation_id_query=installation_id_query,
+        endpoint_name=f"POST /repositories/{owner}/{repo}/pulls/{pull_number}/verify-proposal",
+    )
+
+    try:
+        installation_token = get_installation_access_token(target_installation_id)
+        pr_detail = get_pull_request_detail(owner, repo, pull_number, installation_token)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            temp_path = Path(tmpdir)
+            try:
+                checkout_pr_baseline(
+                    owner=owner,
+                    repo=repo,
+                    base_branch=pr_detail.get("base_ref", "main"),
+                    base_sha=pr_detail.get("base_sha", ""),
+                    installation_token=installation_token,
+                    target_dir=temp_path,
+                )
+            except Exception as clone_err:
+                logger.warning(
+                    "Baseline checkout failed, proceeding with isolated target file workspace: %s",
+                    clone_err,
+                )
+                # Create directory structure for target file if baseline clone is unreachable
+                target_p = temp_path / body.target_file
+                target_p.parent.mkdir(parents=True, exist_ok=True)
+                target_p.write_text(body.merged_code, encoding="utf-8")
+
+            report = verify_merge_proposal(
+                source_dir=temp_path,
+                target_file=body.target_file,
+                merged_code=body.merged_code,
+                language=body.language,
+            )
+            return report
+
+    except HTTPException:
+        raise
+    except GitHubAuthError as exc:
+        logger.error("GitHub App authentication failed for installation %d: %s", target_installation_id, exc)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="GitHub App authentication failed.",
+        ) from exc
+    except GitHubAPIError as exc:
+        logger.error("GitHub API error for %s/%s PR #%d: %s", owner, repo, pull_number, exc)
+        raise HTTPException(
+            status_code=exc.status_code if 400 <= exc.status_code < 600 else status.HTTP_502_BAD_GATEWAY,
+            detail="GitHub API error while verifying pull request.",
+        ) from exc
+    except Exception as exc:
+        logger.exception("Verification pipeline error for %s/%s PR #%d", owner, repo, pull_number)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Verification pipeline failed: {str(exc)}",
+        ) from exc
+

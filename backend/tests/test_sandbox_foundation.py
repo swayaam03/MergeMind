@@ -192,13 +192,15 @@ def test_docker_runner_sdk_execution_lifecycle_mocked():
 
     mock_container = MagicMock()
     mock_container.wait.return_value = {"StatusCode": 0}
-    mock_container.logs.side_effect = [b"Test passed\n", b""]
+    mock_container.logs.return_value = b"Test passed\n"
 
     mock_client = MagicMock()
     mock_client.containers.create.return_value = mock_container
+    mock_docker = MagicMock()
+    mock_docker.from_env.return_value = mock_client
 
     with patch.object(runner, "is_available", return_value=True):
-        with patch("docker.from_env", create=True, return_value=mock_client):
+        with patch.dict("sys.modules", {"docker": mock_docker}):
             with temporary_workspace() as ws:
                 cfg = DockerContainerConfig(
                     image="python:3.11-slim",
@@ -242,8 +244,11 @@ def test_docker_runner_timeout_handling_mocked():
     mock_client = MagicMock()
     mock_client.containers.create.return_value = mock_container
 
+    mock_docker = MagicMock()
+    mock_docker.from_env.return_value = mock_client
+
     with patch.object(runner, "is_available", return_value=True):
-        with patch("docker.from_env", create=True, return_value=mock_client):
+        with patch.dict("sys.modules", {"docker": mock_docker}):
             with temporary_workspace() as ws:
                 cfg = DockerContainerConfig(
                     image="python:3.11-slim",

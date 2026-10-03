@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import LandingPage from './pages/LandingPage';
+import AuthPage from './pages/AuthPage';
 import ConnectPage from './pages/ConnectPage';
 import Repositories from './pages/Repositories';
 import Repository from './pages/Repository';
@@ -11,6 +12,8 @@ export default function App() {
     <Router>
       <Routes>
         <Route path="/" element={<LandingPage />} />
+        <Route path="/login" element={<AuthPage />} />
+        <Route path="/register" element={<AuthPage />} />
         <Route path="/connect" element={<ConnectPage />} />
         <Route path="/repositories" element={<Repositories />} />
         <Route path="/repositories/:owner/:repo" element={<Repository />} />

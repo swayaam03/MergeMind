@@ -112,6 +112,17 @@ def setup_github_installation(
             detail="Internal server error during installation setup.",
         ) from exc
 
+    # If user is logged in, link this installation directly to their account
+    try:
+        from app.api.routes.auth import get_current_user
+        from app.db import database as db
+        current_user = get_current_user(request)
+        if current_user:
+            db.link_github_installation(current_user["id"], installation_id)
+            logger.info("Linked installation %d to user %s", installation_id, current_user["username"])
+    except Exception as link_err:
+        logger.debug("Could not link installation to user in setup: %s", link_err)
+
     # Redirect to frontend repositories route and establish installation context via HttpOnly cookie
     frontend_base = settings.FRONTEND_URL.rstrip("/")
     redirect_url = f"{frontend_base}/repositories"
@@ -200,6 +211,16 @@ def extract_installation_id(
     if target_installation_id is None and installation_id_query:
         if installation_id_query > 0:
             target_installation_id = installation_id_query
+
+    # 6. Logged in user profile with linked GitHub installation
+    if target_installation_id is None:
+        try:
+            from app.api.routes.auth import get_current_user
+            user = get_current_user(request)
+            if user and user.get("github_installation_id"):
+                target_installation_id = int(user["github_installation_id"])
+        except Exception:
+            pass
 
     return target_installation_id
 

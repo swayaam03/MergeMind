@@ -91,6 +91,17 @@ def resolve_installation_id(
             target_installation_id = installation_id_query
             selected_source = "query parameter"
 
+    # 6. Logged in user profile with linked GitHub installation
+    if target_installation_id is None:
+        try:
+            from app.api.routes.auth import get_current_user
+            user = get_current_user(request)
+            if user and user.get("github_installation_id"):
+                target_installation_id = int(user["github_installation_id"])
+                selected_source = "authenticated user profile"
+        except Exception:
+            pass
+
     cookie_present = bool(
         installation_id_cookie
         or request.cookies.get("installation_id")

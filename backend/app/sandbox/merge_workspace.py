@@ -84,6 +84,11 @@ class ProposedWorkspace:
             raise RuntimeError("Workspace has not been initialized.")
         return self.workspace.path
 
+    @property
+    def file_count(self) -> int:
+        """Total number of files in the isolated workspace."""
+        return len(self.workspace.list_files())
+
     def info(self) -> ProposedWorkspaceInfo:
         """Produce a structured Pydantic info object for reporting."""
         return ProposedWorkspaceInfo(

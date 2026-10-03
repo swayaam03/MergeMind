@@ -28,6 +28,7 @@ import {
   Copy,
   Check,
 } from 'lucide-react';
+import VerificationCard from '../components/verification/VerificationCard';
 
 export default function PullRequest() {
   const { owner, repo, pullNumber } = useParams();
@@ -55,6 +56,11 @@ export default function PullRequest() {
   const [proposalData, setProposalData] = useState(null);
   const [proposalError, setProposalError] = useState(null);
   const [copiedCode, setCopiedCode] = useState(false);
+
+  // Phase 5: Deterministic Docker Verification Pipeline state
+  const [verifyingProposal, setVerifyingProposal] = useState(false);
+  const [verificationReport, setVerificationReport] = useState(null);
+  const [verificationError, setVerificationError] = useState(null);
 
   const toggleDocPreview = (path) => {
     setDocPreviewsOpen((prev) => ({
@@ -233,6 +239,54 @@ export default function PullRequest() {
     navigator.clipboard.writeText(code);
     setCopiedCode(true);
     setTimeout(() => setCopiedCode(false), 2000);
+  };
+
+  const handleVerifyProposal = async () => {
+    if (!proposalData || !proposalData.merged_code) return;
+    setVerifyingProposal(true);
+    setVerificationError(null);
+
+    try {
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
+      const apiUrl = `${backendUrl}/api/github/repositories/${owner}/${repo}/pulls/${pullNumber}/verify-proposal`;
+
+      const targetFile =
+        proposalData.file_path ||
+        (conflictData?.conflicts?.[0]?.path) ||
+        'modified_file';
+      const language =
+        proposalData.language ||
+        (conflictData?.conflicts?.[0]?.language) ||
+        'unknown';
+
+      const token = localStorage.getItem('mergemind_token');
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}`, 'X-Session-Token': token } : {}),
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          target_file: targetFile,
+          merged_code: proposalData.merged_code,
+          language: language,
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.detail || 'Verification pipeline failed.');
+      }
+
+      setVerificationReport(data);
+    } catch (err) {
+      console.error('Error during verification:', err);
+      setVerificationError(err.message || 'Failed to verify proposal.');
+    } finally {
+      setVerifyingProposal(false);
+    }
   };
 
   useEffect(() => {
@@ -1315,6 +1369,16 @@ export default function PullRequest() {
                               <div className="p-4 rounded-xl neu-recessed border border-white/[0.04] text-xs text-slate-400 text-center italic">
                                 No resolved code produced. Status is unresolved.
                               </div>
+                            )}
+
+                            {/* Phase 5: Deterministic Docker Sandbox Verification */}
+                            {proposalData.merged_code && (
+                              <VerificationCard
+                                report={verificationReport}
+                                verifying={verifyingProposal}
+                                onVerify={handleVerifyProposal}
+                                error={verificationError}
+                              />
                             )}
 
                           </div>

@@ -13,9 +13,14 @@ import {
   ArrowRight,
   Loader2,
   PlusCircle,
+  User,
+  LogOut,
+  CheckCircle2,
 } from 'lucide-react';
+import { fetchCurrentUser, logoutUser } from '../services/auth';
 
 export default function Repositories() {
+  const [currentUser, setCurrentUser] = useState(null);
   const [repositories, setRepositories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -25,6 +30,11 @@ export default function Repositories() {
     setError(null);
 
     try {
+      const user = await fetchCurrentUser();
+      if (user) {
+        setCurrentUser(user);
+      }
+
       const params = new URLSearchParams(window.location.search);
       const installId = params.get('installation_id');
 
@@ -34,10 +44,12 @@ export default function Repositories() {
         apiUrl += `?installation_id=${encodeURIComponent(installId)}`;
       }
 
+      const token = localStorage.getItem('mergemind_token');
       const response = await fetch(apiUrl, {
         method: 'GET',
         headers: {
           Accept: 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}`, 'X-Session-Token': token } : {}),
           ...(installId ? { 'X-Installation-Id': installId } : {}),
         },
         credentials: 'include',
@@ -60,6 +72,12 @@ export default function Repositories() {
     }
   };
 
+  const handleLogout = async () => {
+    await logoutUser();
+    setCurrentUser(null);
+    window.location.href = '/login';
+  };
+
   useEffect(() => {
     fetchRepositories();
   }, []);
@@ -78,6 +96,23 @@ export default function Repositories() {
           </Link>
 
           <div className="flex items-center gap-2.5 sm:gap-3">
+            {currentUser && (
+              <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/[0.03] border border-white/[0.06] text-xs font-mono">
+                <User className="w-3.5 h-3.5 text-sky-400" />
+                <span className="text-slate-200">{currentUser.username}</span>
+                {currentUser.is_github_connected ? (
+                  <span className="inline-flex items-center gap-1 text-[11px] text-emerald-400 font-sans ml-1">
+                    <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                    GitHub Linked
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-[11px] text-amber-400 font-sans ml-1">
+                    GitHub Not Linked
+                  </span>
+                )}
+              </div>
+            )}
+
             <button
               onClick={fetchRepositories}
               disabled={loading}
@@ -94,8 +129,26 @@ export default function Repositories() {
               title="Manage GitHub App connection"
             >
               <PlusCircle className="w-3.5 h-3.5 text-sky-400" />
-              <span className="hidden sm:inline">Manage Connection</span>
+              <span className="hidden sm:inline">GitHub Status</span>
             </Link>
+
+            {currentUser ? (
+              <button
+                onClick={handleLogout}
+                className="neu-button p-2 sm:px-3 sm:py-2 rounded-full text-xs font-medium text-slate-400 hover:text-rose-400 flex items-center gap-1.5 transition-colors"
+                title="Sign Out"
+              >
+                <LogOut className="w-3.5 h-3.5 text-rose-400" />
+                <span className="hidden sm:inline">Sign Out</span>
+              </button>
+            ) : (
+              <Link
+                to="/login"
+                className="neu-button px-3.5 py-2 rounded-full text-xs font-medium text-slate-300 hover:text-white flex items-center gap-1.5 transition-colors"
+              >
+                <span>Sign In</span>
+              </Link>
+            )}
 
             <Link
               to="/"
@@ -170,11 +223,20 @@ export default function Repositories() {
                 <RefreshCw className="w-3.5 h-3.5 text-sky-400" />
                 <span>Try Again</span>
               </button>
-              <Link
-                to="/connect"
+              <button
+                onClick={() => {
+                  const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
+                  window.location.href = `${backendUrl}/api/github/setup?installation_id=167531148`;
+                }}
                 className="neu-glow-btn px-5 py-2.5 rounded-xl text-xs font-semibold text-white flex items-center gap-2"
               >
-                <span>Connect GitHub</span>
+                <span>Link Active App (167531148)</span>
+              </button>
+              <Link
+                to="/connect"
+                className="neu-button px-5 py-2.5 rounded-xl text-xs font-medium text-slate-300 hover:text-white flex items-center gap-2"
+              >
+                <span>Connection Settings</span>
               </Link>
             </div>
           </div>

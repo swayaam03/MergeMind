@@ -366,3 +366,30 @@ def simulate_merge_and_extract_conflicts(
             "conflicting_files": conflicting_files,
             "conflicts": conflicts,
         }
+
+
+def checkout_pr_baseline(
+    owner: str,
+    repo: str,
+    base_branch: str,
+    base_sha: str,
+    installation_token: str,
+    target_dir: Path,
+) -> None:
+    """
+    Safely clone/fetch baseline repository files at the base commit into target_dir.
+    Allows isolated verification of proposed merges against full repository context.
+    """
+    secrets = [installation_token]
+    remote_url = f"https://x-access-token:{installation_token}@github.com/{owner}/{repo}.git"
+
+    run_git_command(["init"], cwd=target_dir, secret_tokens=secrets)
+    run_git_command(["config", "user.name", "MergeMind"], cwd=target_dir, secret_tokens=secrets)
+    run_git_command(["config", "user.email", "mergemind@local"], cwd=target_dir, secret_tokens=secrets)
+    run_git_command(["remote", "add", "origin", remote_url], cwd=target_dir, secret_tokens=secrets)
+
+    # Fetch base commit or branch
+    target_ref = base_sha if base_sha else f"refs/heads/{base_branch}"
+    run_git_command(["fetch", "--depth=1", "origin", target_ref], cwd=target_dir, secret_tokens=secrets)
+    run_git_command(["checkout", "-f", "FETCH_HEAD"], cwd=target_dir, secret_tokens=secrets)
+

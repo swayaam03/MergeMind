@@ -3,13 +3,19 @@ import { Link } from 'react-router-dom';
 import Logo from '../common/Logo';
 import { ArrowRight, Menu, X, Loader2 } from 'lucide-react';
 import { useGetStarted } from '../../hooks/useGetStarted';
+import { getStoredUser } from '../../services/auth';
 
 export default function Navbar({ activeSection, onNavigate }) {
+  const [currentUser, setCurrentUser] = useState(null);
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const navRef = useRef(null);
   const [indicatorStyle, setIndicatorStyle] = useState({ left: 0, top: 0, width: 0, height: 0, opacity: 0 });
   const { handleGetStarted, checking } = useGetStarted();
+
+  useEffect(() => {
+    setCurrentUser(getStoredUser());
+  }, []);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -121,19 +127,47 @@ export default function Navbar({ activeSection, onNavigate }) {
           })}
         </nav>
 
-        {/* Right: CTA Button */}
-        <div className="hidden md:flex items-center gap-4">
-          <button
-            onClick={handleGetStarted}
-            disabled={checking}
-            className="neu-button px-5 py-2 rounded-full text-sm font-medium text-slate-200 flex items-center gap-2 group disabled:opacity-75"
-          >
-            {checking && <Loader2 className="w-3.5 h-3.5 text-sky-400 animate-spin" />}
-            <span>Get Started</span>
-            {!checking && (
-              <ArrowRight className="w-3.5 h-3.5 text-sky-400 transition-transform duration-200 group-hover:translate-x-0.5" />
-            )}
-          </button>
+        {/* Right: CTA & Account Buttons */}
+        <div className="hidden md:flex items-center gap-3">
+          {currentUser ? (
+            <>
+              <Link
+                to="/connect"
+                className="neu-button px-3.5 py-2 rounded-full text-xs font-mono text-slate-200 hover:text-white flex items-center gap-1.5 transition-colors"
+                title="Manage Account & GitHub Connection"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                <span>{currentUser.username}</span>
+              </Link>
+              <Link
+                to="/repositories"
+                className="neu-glow-btn px-4 py-2 rounded-full text-xs font-semibold text-white flex items-center gap-1.5"
+              >
+                <span>Repositories</span>
+                <ArrowRight className="w-3.5 h-3.5 text-sky-200" />
+              </Link>
+            </>
+          ) : (
+            <>
+              <Link
+                to="/login"
+                className="neu-button px-4 py-2 rounded-full text-xs font-medium text-slate-300 hover:text-white flex items-center gap-1.5 transition-colors"
+              >
+                <span>Sign In</span>
+              </Link>
+              <button
+                onClick={handleGetStarted}
+                disabled={checking}
+                className="neu-glow-btn px-5 py-2 rounded-full text-xs font-semibold text-white flex items-center gap-2 group disabled:opacity-75"
+              >
+                {checking && <Loader2 className="w-3.5 h-3.5 text-sky-200 animate-spin" />}
+                <span>Get Started</span>
+                {!checking && (
+                  <ArrowRight className="w-3.5 h-3.5 text-sky-200 transition-transform duration-200 group-hover:translate-x-0.5" />
+                )}
+              </button>
+            </>
+          )}
         </div>
 
         {/* Mobile menu trigger */}
@@ -167,7 +201,16 @@ export default function Navbar({ activeSection, onNavigate }) {
                 </a>
               );
             })}
-            <div className="pt-3 mt-1 border-t border-white/[0.06]">
+            <div className="pt-3 mt-1 border-t border-white/[0.06] flex flex-col gap-2">
+              {!currentUser && (
+                <Link
+                  to="/login"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="w-full neu-button py-2.5 rounded-xl text-sm font-medium text-slate-200 flex items-center justify-center gap-2"
+                >
+                  <span>Sign In</span>
+                </Link>
+              )}
               <button
                 onClick={(e) => {
                   setMobileMenuOpen(false);
@@ -177,7 +220,7 @@ export default function Navbar({ activeSection, onNavigate }) {
                 className="w-full neu-glow-btn py-2.5 rounded-xl text-sm font-medium text-white flex items-center justify-center gap-2 disabled:opacity-75"
               >
                 {checking && <Loader2 className="w-3.5 h-3.5 text-sky-300 animate-spin" />}
-                <span>Get Started</span>
+                <span>{currentUser ? 'Go to Repositories' : 'Get Started'}</span>
                 {!checking && <ArrowRight className="w-3.5 h-3.5 text-sky-300" />}
               </button>
             </div>

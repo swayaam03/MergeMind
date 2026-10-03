@@ -27,6 +27,13 @@ from app.sandbox.syntax_validator import (
     validate_javascript_syntax_with_treesitter,
     validate_python_syntax_in_process,
 )
+from app.sandbox.test_runner import (
+    SandboxTestRunner,
+    TestExecutionReport,
+    discover_test_files,
+    parse_npm_test_output,
+    parse_pytest_output,
+)
 from app.sandbox.workspace import (
     IsolatedWorkspace,
     WorkspaceSecurityError,
@@ -55,6 +62,11 @@ __all__ = [
     "validate_python_syntax_in_process",
     "validate_javascript_syntax_with_treesitter",
     "validate_java_syntax_with_treesitter",
+    "SandboxTestRunner",
+    "TestExecutionReport",
+    "discover_test_files",
+    "parse_pytest_output",
+    "parse_npm_test_output",
     "IsolatedWorkspace",
     "WorkspaceSecurityError",
     "is_forbidden_file",

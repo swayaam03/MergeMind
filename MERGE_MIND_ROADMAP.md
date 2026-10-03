@@ -274,9 +274,9 @@ Structured Result
 -   [x] Apply proposed resolution inside sandbox.
 -   [ ] Install project dependencies safely.
 -   [x] Compile/run project code where applicable.
--   [ ] Execute project tests.
--   [ ] Capture stdout/stderr.
--   [ ] Create structured test result.
+-   [x] Execute project tests.
+-   [x] Capture stdout/stderr.
+-   [x] Create structured test result.
 -   [ ] Integrate Semgrep.
 -   [ ] Create structured security result.
 -   [ ] Detect security findings.

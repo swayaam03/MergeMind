@@ -96,14 +96,14 @@ class LLMClient:
                 "OPENROUTER_API_KEY is not configured. Please set OPENROUTER_API_KEY."
             )
 
-    async def complete_merge_proposal(
+    async def complete_structured_json(
         self,
         system_prompt: str,
         user_prompt: str,
-    ) -> MergeProposal:
+    ) -> Dict[str, Any]:
         """
         Execute an async completion with LiteLLM, requesting structured JSON output
-        and validating it against the MergeProposal schema.
+        and returning the decoded dictionary.
         """
         self.validate_configuration()
 
@@ -156,16 +156,29 @@ class LLMClient:
         duration = time.monotonic() - start_time
         logger.info("LLM completion received in %.2fs", duration)
 
-        # Extract text content safely
         raw_text = self._extract_raw_content(response)
         if not raw_text or not raw_text.strip():
             logger.error("Empty completion response returned by LLM")
             raise LLMResponseParsingError("LLM returned an empty response.")
 
-        # Parse and validate JSON
         parsed_dict = self._parse_json_content(raw_text)
+        return parsed_dict
+
+    async def complete_merge_proposal(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+    ) -> MergeProposal:
+        """
+        Execute an async completion with LiteLLM, requesting structured JSON output
+        and validating it against the MergeProposal schema.
+        """
+        parsed_dict = await self.complete_structured_json(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+        )
+
         try:
-            # Set model metadata on proposal
             if "model" not in parsed_dict or not parsed_dict["model"]:
                 parsed_dict["model"] = self.model
             proposal = MergeProposal(**parsed_dict)

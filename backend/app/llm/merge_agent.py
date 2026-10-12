@@ -21,12 +21,14 @@ class MergeAgent:
         self,
         conflicted_file: Dict[str, Any],
         repository_context: Optional[RepositoryContext] = None,
+        retry_feedback: Optional[str] = None,
     ) -> MergeProposal:
         """
         Synthesize a semantic merge proposal for a single conflicted file.
 
         Steps:
-        1. Construct structured prompt using Repository Context, AST analysis, and Base/Local/Remote code.
+        1. Construct structured prompt using Repository Context, AST analysis, Base/Local/Remote code,
+           and optional verification failure feedback from previous attempts.
         2. Invoke LLM Client with strict system prompt and timeout.
         3. Validate and enforce status semantics on returned MergeProposal.
         """
@@ -36,6 +38,7 @@ class MergeAgent:
         user_prompt = build_merge_prompt(
             conflicted_file=conflicted_file,
             repository_context=repository_context,
+            retry_feedback=retry_feedback,
         )
 
         proposal = await self.client.complete_merge_proposal(

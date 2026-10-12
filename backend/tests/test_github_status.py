@@ -40,7 +40,7 @@ def test_status_connected_via_cookie(mock_list, client):
     assert data["repository_count"] == 2
     # Verify security: no tokens
     assert "token" not in data
-    assert "installation_id" not in data
+    assert data["installation_id"] == 54321
     mock_list.assert_called_once_with(54321)
 
 

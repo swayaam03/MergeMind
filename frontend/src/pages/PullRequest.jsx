@@ -32,6 +32,7 @@ import {
   FileSearch,
 } from 'lucide-react';
 import VerificationCard from '../components/verification/VerificationCard';
+import WorkflowPanel from '../components/workflow/WorkflowPanel';
 
 export default function PullRequest() {
   const { owner, repo, pullNumber } = useParams();
@@ -65,6 +66,12 @@ export default function PullRequest() {
   const [verifyingProposal, setVerifyingProposal] = useState(false);
   const [verificationReport, setVerificationReport] = useState(null);
   const [verificationError, setVerificationError] = useState(null);
+
+  // Phase 6: Autonomous LangGraph Workflow state
+  const [runningWorkflow, setRunningWorkflow] = useState(false);
+  const [workflowData, setWorkflowData] = useState(null);
+  const [workflowError, setWorkflowError] = useState(null);
+  const [maxRetries, setMaxRetries] = useState(2);
 
   const toggleDocPreview = (path) => {
     setDocPreviewsOpen((prev) => ({
@@ -302,6 +309,46 @@ export default function PullRequest() {
       setVerificationError(err.message || 'Failed to verify proposal.');
     } finally {
       setVerifyingProposal(false);
+    }
+  };
+
+  const handleRunWorkflow = async () => {
+    setRunningWorkflow(true);
+    setWorkflowError(null);
+
+    try {
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
+      const apiUrl = `${backendUrl}/api/github/repositories/${owner}/${repo}/pulls/${pullNumber}/resolve-workflow?max_retries=${maxRetries}`;
+
+      const token = localStorage.getItem('mergemind_token');
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}`, 'X-Session-Token': token } : {}),
+        },
+        credentials: 'include',
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.detail || 'Autonomous workflow execution failed.');
+      }
+
+      setWorkflowData(data);
+      // Auto-populate proposal and verification displays with latest attempt
+      if (data.current_proposal) {
+        setProposalData(data.current_proposal);
+      }
+      if (data.current_verification) {
+        setVerificationReport(data.current_verification);
+      }
+    } catch (err) {
+      console.error('Error running autonomous workflow:', err);
+      setWorkflowError(err.message || 'Failed to execute workflow.');
+    } finally {
+      setRunningWorkflow(false);
     }
   };
 
@@ -781,6 +828,18 @@ export default function PullRequest() {
                         </div>
                       )}
                     </div>
+                  )}
+
+                  {/* Phase 6: Autonomous LangGraph StateGraph Workflow */}
+                  {(conflictData || workflowData || runningWorkflow) && (
+                    <WorkflowPanel
+                      workflowData={workflowData}
+                      running={runningWorkflow}
+                      onRunWorkflow={handleRunWorkflow}
+                      maxRetries={maxRetries}
+                      onChangeMaxRetries={setMaxRetries}
+                      error={workflowError}
+                    />
                   )}
 
                   {/* MergeMind Proposal Canvas (LLM Agent) */}

@@ -72,12 +72,14 @@ def build_merge_prompt(
     conflicted_file: Dict[str, Any],
     repository_context: Optional[RepositoryContext] = None,
     max_context_chars: int = 25_000,
+    retry_feedback: Optional[str] = None,
 ) -> str:
     """
     Construct a structured prompt for the LLM Merge Agent.
 
     Strictly preserves Base, Local, and Remote conflict code without truncation,
     while bounding secondary repository context (docs, tree, neighbors).
+    Incorporates verification failure feedback on retries.
     """
     path = conflicted_file.get("path", "unknown_file")
     language = conflicted_file.get("language", "text")
@@ -219,7 +221,23 @@ REMOTE VERSION (Source Branch / PR / Theirs):
 ```{language}
 {remote_code}
 ```
+"""
 
+    if retry_feedback and retry_feedback.strip():
+        prompt += f"""
+==================================================
+PREVIOUS ATTEMPT VERIFICATION FAILURE FEEDBACK:
+==================================================
+Your previous proposed resolution for this file failed automated verification checks:
+{retry_feedback.strip()}
+
+CRITICAL INSTRUCTIONS FOR THIS RETRY:
+1. Specifically address and fix the exact syntax errors, test failures, or security findings described above.
+2. Ensure your revised code compiles and executes cleanly without breaking existing tests.
+3. Preserve the valid logic from both Local and Remote branches.
+"""
+
+    prompt += """
 TASK:
 1. Reason carefully about the changes introduced by both Local and Remote relative to Base.
 2. Produce the safest semantic merge possible that integrates the intended functionality from both sides.

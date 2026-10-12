@@ -291,7 +291,7 @@ required compilation/tests and security checks.
 
 # PHASE 6 --- LangGraph Retry & Explanation Workflow
 
-**Status:** ⚪ NOT STARTED
+**Status:** 🟢 COMPLETED
 
 ### Goal
 
@@ -342,22 +342,22 @@ Verification
 
 ### Tasks
 
--   [ ] Implement shared `MergeState`.
--   [ ] Add conflict information to state.
--   [ ] Add AST information to state.
--   [ ] Add context to state.
--   [ ] Add merge attempt history.
--   [ ] Add retry counter.
--   [ ] Add verification results.
--   [ ] Add security results.
--   [ ] Implement LangGraph workflow.
--   [ ] Implement conditional retry routing.
--   [ ] Set a retry limit of approximately 2--3 attempts.
--   [ ] Feed specific test failures back to the Merge Agent.
--   [ ] Feed specific security findings back when appropriate.
--   [ ] Implement Explanation Agent.
--   [ ] Generate human-readable failure explanation.
--   [ ] Add pipeline status events.
+-   [x] Implement shared `MergeState`.
+-   [x] Add conflict information to state.
+-   [x] Add AST information to state.
+-   [x] Add context to state.
+-   [x] Add merge attempt history.
+-   [x] Add retry counter.
+-   [x] Add verification results.
+-   [x] Add security results.
+-   [x] Implement LangGraph workflow.
+-   [x] Implement conditional retry routing.
+-   [x] Set a retry limit of approximately 2--3 attempts.
+-   [x] Feed specific test failures back to the Merge Agent.
+-   [x] Feed specific security findings back when appropriate.
+-   [x] Implement Explanation Agent.
+-   [x] Generate human-readable failure explanation.
+-   [x] Add pipeline status events.
 
 ### Phase Completion Condition
 

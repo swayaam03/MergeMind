@@ -32,6 +32,7 @@ from app.llm.client import (
 )
 from app.llm.merge_agent import MergeAgent
 from app.llm.schemas import MergeProposal, MergeProposalRequest
+from app.pipeline.graph import run_merge_workflow
 from app.pipeline.verifier import verify_merge_proposal
 from app.schemas.verification import LanguageType, VerificationReport
 
@@ -380,4 +381,189 @@ def verify_proposal(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Verification pipeline failed: {str(exc)}",
         ) from exc
+
+
+@router.post(
+    "/repositories/{owner}/{repo}/pulls/{pull_number}/resolve-workflow",
+    response_model=Dict[str, Any],
+)
+async def resolve_merge_workflow_endpoint(
+    owner: str,
+    repo: str,
+    pull_number: int,
+    request: Request,
+    file_path: Optional[str] = Query(
+        default=None,
+        description="Optional conflicting file path to resolve. Defaults to first conflicted file.",
+    ),
+    max_retries: int = Query(
+        default=2,
+        ge=1,
+        le=5,
+        description="Maximum retry attempts on verification failure.",
+    ),
+    installation_id_cookie: Optional[str] = Cookie(
+        default=None,
+        alias="installation_id",
+        description="GitHub App installation ID stored in HttpOnly cookie",
+    ),
+    installation_id_query: Optional[int] = Query(
+        default=None,
+        alias="installation_id",
+        description="Optional installation ID override for testing",
+    ),
+    installation_id_header: Optional[str] = Header(
+        default=None,
+        alias="x-installation-id",
+        description="Optional installation ID provided via HTTP header",
+    ),
+) -> Dict[str, Any]:
+    """
+    Execute the Phase 6 autonomous LangGraph workflow for a pull request conflict:
+    1. Prepares baseline repository workspace.
+    2. Simulates 3-way merge to extract conflict hunks.
+    3. Runs Tree-sitter AST analysis and extracts repository context.
+    4. Triggers the LangGraph StateGraph (Merge Agent -> Docker Verification -> Retry Loop -> Explanation Agent).
+    """
+    target_installation_id = resolve_installation_id(
+        request=request,
+        installation_id_cookie=installation_id_cookie,
+        installation_id_header=installation_id_header,
+        installation_id_query=installation_id_query,
+        endpoint_name=f"POST /repositories/{owner}/{repo}/pulls/{pull_number}/resolve-workflow",
+    )
+
+    try:
+        installation_token = get_installation_access_token(target_installation_id)
+
+        # 1. Verify access
+        accessible_repos = get_installation_repositories(installation_token)
+        target_full_name = f"{owner}/{repo}".lower()
+        if not any(str(r.get("full_name", "")).lower() == target_full_name for r in accessible_repos):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Repository '{owner}/{repo}' is not accessible to this installation.",
+            )
+
+        # 2. PR details
+        pr_data = get_pull_request_detail(
+            owner=owner,
+            repo=repo,
+            pull_number=pull_number,
+            installation_token=installation_token,
+        )
+        base_obj = pr_data.get("base") or {}
+        head_obj = pr_data.get("head") or {}
+        base_branch = base_obj.get("ref", "main")
+        head_branch = head_obj.get("ref", "")
+        base_sha = base_obj.get("sha", "")
+        head_sha = head_obj.get("sha", "")
+
+        # 3. Simulate merge
+        extraction = simulate_merge_and_extract_conflicts(
+            owner=owner,
+            repo=repo,
+            pull_number=pull_number,
+            base_branch=base_branch,
+            head_branch=head_branch,
+            base_sha=base_sha,
+            head_sha=head_sha,
+            installation_token=installation_token,
+        )
+
+        conflicts = extraction.get("conflicts", [])
+        if not conflicts:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No conflicting files detected for this pull request.",
+            )
+
+        # 4. Target file selection
+        target_conflict = None
+        if file_path:
+            norm_target = file_path.strip().replace("\\", "/")
+            for c in conflicts:
+                if c.get("path", "").replace("\\", "/") == norm_target:
+                    target_conflict = c
+                    break
+            if not target_conflict:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Conflicted file '{file_path}' not found in PR #{pull_number}.",
+                )
+        else:
+            target_conflict = conflicts[0]
+
+        # 5. AST Analysis
+        target_path = target_conflict.get("path", "")
+        ast_result = analyze_conflicted_file(
+            path=target_path,
+            base_code=target_conflict.get("base", ""),
+            local_code=target_conflict.get("local", ""),
+            remote_code=target_conflict.get("remote", ""),
+        )
+        target_conflict["ast_analysis"] = ast_result.model_dump()
+
+        # 6. Repository Context
+        ast_analyses = {target_path: target_conflict["ast_analysis"]}
+        conflict_sources = {target_path: target_conflict.get("local", "") or target_conflict.get("base", "")}
+        try:
+            repo_ctx = extract_repository_context(
+                owner=owner,
+                repo=repo,
+                token=installation_token,
+                base_ref=base_branch,
+                head_ref=head_branch,
+                conflicting_files=[target_path],
+                ast_analyses=ast_analyses,
+                conflict_sources=conflict_sources,
+            )
+        except Exception as ctx_err:
+            logger.warning("Repository context extraction failed, proceeding with minimal context: %s", ctx_err)
+            repo_ctx = None
+
+        # 7. Baseline workspace preparation & Workflow Execution
+        with tempfile.TemporaryDirectory() as tmpdir:
+            temp_path = Path(tmpdir)
+            try:
+                checkout_pr_baseline(
+                    owner=owner,
+                    repo=repo,
+                    base_branch=base_branch,
+                    base_sha=base_sha,
+                    installation_token=installation_token,
+                    target_dir=temp_path,
+                )
+            except Exception as clone_err:
+                logger.warning("Baseline checkout error, proceeding in isolated target workspace: %s", clone_err)
+
+            final_state = await run_merge_workflow(
+                conflicted_file=target_conflict,
+                repository_context=repo_ctx.model_dump() if repo_ctx else None,
+                source_dir=str(temp_path),
+                max_retries=max_retries,
+            )
+
+            return dict(final_state)
+
+    except HTTPException:
+        raise
+    except GitHubAuthError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="GitHub App authentication failed.",
+        ) from exc
+    except (LLMConfigurationError, LLMTimeoutError, LLMProviderError, LLMResponseParsingError, LLMError) as exc:
+        logger.error("LLM failure during resolve-workflow for %s/%s PR #%d: %s", owner, repo, pull_number, exc)
+        raise HTTPException(
+            status_code=exc.status_code if hasattr(exc, "status_code") else status.HTTP_502_BAD_GATEWAY,
+            detail=str(exc),
+        ) from exc
+    except Exception as exc:
+        logger.exception("Unexpected error during resolve-workflow for %s/%s PR #%d", owner, repo, pull_number)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Workflow execution failed: {str(exc)}",
+        ) from exc
+
 

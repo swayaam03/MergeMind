@@ -215,7 +215,7 @@ def simulate_merge_and_extract_conflicts(
         run_git_command(["remote", "add", "origin", remote_url], cwd=temp_path, secret_tokens=secrets)
 
         # 2. Fetch base ref and pull request head ref
-        # Fetching refs/heads/<base_branch> and refs/pull/<pull_number>/head
+        # Fetching refs/heads/<base_branch> and refs/pull/<pull_number>/head with explicit refspecs
         logger.info(
             "Fetching Git references for %s/%s PR #%d (base=%s, head=%s)",
             owner,
@@ -224,34 +224,76 @@ def simulate_merge_and_extract_conflicts(
             base_branch,
             head_branch,
         )
+        target_ref = f"+refs/heads/{base_branch}:refs/remotes/origin/{base_branch}"
+        pr_ref = f"+refs/pull/{pull_number}/head:refs/remotes/origin/pr/{pull_number}"
         fetch_args = [
             "fetch",
             "--depth=100",
             "origin",
-            f"refs/heads/{base_branch}",
-            f"refs/pull/{pull_number}/head",
+            target_ref,
+            pr_ref,
         ]
         try:
             run_git_command(fetch_args, cwd=temp_path, secret_tokens=secrets)
         except GitConflictError:
             # Fallback: attempt fetching by commit SHAs directly if ref lookup fails
             logger.info("Ref fetch fallback: fetching commit SHAs %s and %s", base_sha, head_sha)
-            run_git_command(["fetch", "--depth=100", "origin", base_sha, head_sha], cwd=temp_path, secret_tokens=secrets)
+            fallback_args = ["fetch", "--depth=100", "origin"]
+            if base_branch:
+                fallback_args.append(f"+refs/heads/{base_branch}:refs/remotes/origin/{base_branch}")
+            if head_branch:
+                fallback_args.append(f"+refs/heads/{head_branch}:refs/remotes/origin/{head_branch}")
+            if base_sha:
+                fallback_args.append(base_sha)
+            if head_sha:
+                fallback_args.append(head_sha)
+            run_git_command(fallback_args, cwd=temp_path, secret_tokens=secrets)
+
+        # Resolve target commit SHA (current tip of base branch)
+        target_sha = base_sha
+        target_rev = run_git_command(
+            ["rev-parse", f"refs/remotes/origin/{base_branch}"],
+            cwd=temp_path,
+            secret_tokens=secrets,
+            check=False,
+        )
+        if target_rev.returncode == 0 and target_rev.stdout.strip():
+            target_sha = target_rev.stdout.strip()
+
+        # Resolve PR head commit SHA
+        source_sha = head_sha
+        pr_rev = run_git_command(
+            ["rev-parse", f"refs/remotes/origin/pr/{pull_number}"],
+            cwd=temp_path,
+            secret_tokens=secrets,
+            check=False,
+        )
+        if pr_rev.returncode == 0 and pr_rev.stdout.strip():
+            source_sha = pr_rev.stdout.strip()
+        elif head_branch:
+            head_branch_rev = run_git_command(
+                ["rev-parse", f"refs/remotes/origin/{head_branch}"],
+                cwd=temp_path,
+                secret_tokens=secrets,
+                check=False,
+            )
+            if head_branch_rev.returncode == 0 and head_branch_rev.stdout.strip():
+                source_sha = head_branch_rev.stdout.strip()
 
         # 3. Determine common merge-base
-        mb_proc = run_git_command(["merge-base", base_sha, head_sha], cwd=temp_path, secret_tokens=secrets, check=False)
+        mb_proc = run_git_command(["merge-base", target_sha, source_sha], cwd=temp_path, secret_tokens=secrets, check=False)
         merge_base_sha = mb_proc.stdout.strip()
 
         # If merge-base wasn't found due to shallow history, deepen fetch
         if mb_proc.returncode != 0 or not merge_base_sha:
             logger.info("Merge base not found with depth=100; deepening fetch for full history.")
             run_git_command(["fetch", "--unshallow", "origin"], cwd=temp_path, secret_tokens=secrets, check=False)
-            mb_proc = run_git_command(["merge-base", base_sha, head_sha], cwd=temp_path, secret_tokens=secrets, check=False)
+            mb_proc = run_git_command(["merge-base", target_sha, source_sha], cwd=temp_path, secret_tokens=secrets, check=False)
             merge_base_sha = mb_proc.stdout.strip()
 
         # 4. Determine list of changed files in PR (diff between base and head)
         changed_proc = run_git_command(
-            ["diff", "--name-only", f"{base_sha}...{head_sha}"],
+            ["diff", "--name-only", f"{target_sha}...{source_sha}"],
             cwd=temp_path,
             secret_tokens=secrets,
             check=False,
@@ -259,23 +301,31 @@ def simulate_merge_and_extract_conflicts(
         changed_files: list[str] = [
             f.strip() for f in changed_proc.stdout.splitlines() if f.strip()
         ]
+        if not changed_files and merge_base_sha:
+            fallback_proc = run_git_command(
+                ["diff", "--name-only", merge_base_sha, source_sha],
+                cwd=temp_path,
+                secret_tokens=secrets,
+                check=False,
+            )
+            changed_files = [f.strip() for f in fallback_proc.stdout.splitlines() if f.strip()]
         if not changed_files:
             # If triple-dot diff is empty, fallback to double-dot diff
             fallback_proc = run_git_command(
-                ["diff", "--name-only", base_sha, head_sha],
+                ["diff", "--name-only", target_sha, source_sha],
                 cwd=temp_path,
                 secret_tokens=secrets,
                 check=False,
             )
             changed_files = [f.strip() for f in fallback_proc.stdout.splitlines() if f.strip()]
 
-        # 5. Checkout base commit (detached HEAD)
-        run_git_command(["checkout", base_sha], cwd=temp_path, secret_tokens=secrets)
+        # 5. Checkout target branch commit (detached HEAD)
+        run_git_command(["checkout", target_sha], cwd=temp_path, secret_tokens=secrets)
 
-        # 6. Simulate merge with source commit (head_sha)
+        # 6. Simulate merge with source commit (source_sha)
         # We expect exit code != 0 when there are conflicts
         merge_proc = run_git_command(
-            ["merge", "--no-commit", "--no-ff", head_sha],
+            ["merge", "--no-commit", "--no-ff", source_sha],
             cwd=temp_path,
             secret_tokens=secrets,
             check=False,
@@ -388,8 +438,13 @@ def checkout_pr_baseline(
     run_git_command(["config", "user.email", "mergemind@local"], cwd=target_dir, secret_tokens=secrets)
     run_git_command(["remote", "add", "origin", remote_url], cwd=target_dir, secret_tokens=secrets)
 
-    # Fetch base commit or branch
-    target_ref = base_sha if base_sha else f"refs/heads/{base_branch}"
-    run_git_command(["fetch", "--depth=1", "origin", target_ref], cwd=target_dir, secret_tokens=secrets)
-    run_git_command(["checkout", "-f", "FETCH_HEAD"], cwd=target_dir, secret_tokens=secrets)
+    # Fetch base branch or fallback commit
+    target_ref = f"+refs/heads/{base_branch}:refs/remotes/origin/{base_branch}"
+    try:
+        run_git_command(["fetch", "--depth=1", "origin", target_ref], cwd=target_dir, secret_tokens=secrets)
+        run_git_command(["checkout", "-f", f"refs/remotes/origin/{base_branch}"], cwd=target_dir, secret_tokens=secrets)
+    except Exception:
+        fallback_ref = base_sha if base_sha else f"refs/heads/{base_branch}"
+        run_git_command(["fetch", "--depth=1", "origin", fallback_ref], cwd=target_dir, secret_tokens=secrets)
+        run_git_command(["checkout", "-f", "FETCH_HEAD"], cwd=target_dir, secret_tokens=secrets)
 

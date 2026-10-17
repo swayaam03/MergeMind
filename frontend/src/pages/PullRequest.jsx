@@ -33,6 +33,8 @@ import {
 } from 'lucide-react';
 import VerificationCard from '../components/verification/VerificationCard';
 import WorkflowPanel from '../components/workflow/WorkflowPanel';
+import ConflictReviewPanel from '../components/review/ConflictReviewPanel';
+import { subscribeToPipelineProgress } from '../services/websocket';
 
 export default function PullRequest() {
   const { owner, repo, pullNumber } = useParams();
@@ -356,6 +358,19 @@ export default function PullRequest() {
     if (owner && repo && pullNumber) {
       fetchPullRequest();
     }
+  }, [owner, repo, pullNumber]);
+
+  useEffect(() => {
+    if (!owner || !repo || !pullNumber) return;
+    const channelId = `${owner}_${repo}_${pullNumber}`;
+    const unsubscribe = subscribeToPipelineProgress(
+      channelId,
+      (evt) => {
+        console.log('[Live Pipeline Progress]', evt);
+      },
+      (err) => console.warn('[WS Connection Error]', err)
+    );
+    return () => unsubscribe();
   }, [owner, repo, pullNumber]);
 
   return (
@@ -1020,42 +1035,25 @@ export default function PullRequest() {
                             </div>
                           )}
 
-                          {/* Proposed Merged Code View */}
+                          {/* Phase 8: Interactive 4-Way Review & Human Decision Panel */}
                           {proposalData.merged_code ? (
-                            <div className="rounded-xl neu-recessed border border-white/[0.06] overflow-hidden">
-                              <div className="p-3.5 flex items-center justify-between border-b border-white/[0.04] bg-white/[0.02]">
-                                <div className="flex items-center gap-2">
-                                  <FileCode className="w-4 h-4 text-violet-400" />
-                                  <span className="text-xs font-mono font-semibold text-white">
-                                    Proposed Merged Code
-                                  </span>
-                                </div>
-
-                                <button
-                                  type="button"
-                                  onClick={() => handleCopyCode(proposalData.merged_code)}
-                                  className="neu-button px-2.5 py-1 rounded-lg text-xs font-mono text-slate-300 hover:text-white flex items-center gap-1.5 transition-colors"
-                                >
-                                  {copiedCode ? (
-                                    <>
-                                      <Check className="w-3.5 h-3.5 text-emerald-400" />
-                                      <span className="text-emerald-400">Copied</span>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Copy className="w-3.5 h-3.5 text-slate-400" />
-                                      <span>Copy code</span>
-                                    </>
-                                  )}
-                                </button>
-                              </div>
-
-                              <div className="p-4 bg-slate-950/80 max-h-96 overflow-y-auto overflow-x-auto">
-                                <pre className="font-mono text-xs text-slate-200 whitespace-pre leading-relaxed">
-                                  {proposalData.merged_code}
-                                </pre>
-                              </div>
-                            </div>
+                            <ConflictReviewPanel
+                              owner={owner}
+                              repo={repo}
+                              pullNumber={Number(pullNumber)}
+                              filePath={conflictData?.conflicts?.[0]?.path || pullRequest?.head_branch || 'conflicted_file'}
+                              baseCode={conflictData?.conflicts?.[0]?.base || ''}
+                              localCode={conflictData?.conflicts?.[0]?.local || ''}
+                              remoteCode={conflictData?.conflicts?.[0]?.remote || ''}
+                              proposedCode={proposalData.merged_code}
+                              reasoning={proposalData.reasoning}
+                              confidence={proposalData.confidence}
+                              verificationReport={verificationReport}
+                              runId={workflowData?.merge_run_id}
+                              onDecisionSubmitted={(decision, result) => {
+                                console.log(`[Review Decision] ${decision}:`, result);
+                              }}
+                            />
                           ) : (
                             <div className="p-4 rounded-xl neu-recessed border border-white/[0.04] text-xs text-slate-400 text-center italic">
                               No resolved code produced. Status is unresolved.

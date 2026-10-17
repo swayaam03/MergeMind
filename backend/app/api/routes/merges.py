@@ -8,8 +8,18 @@ from fastapi import APIRouter, Body, Cookie, Header, HTTPException, Query, Reque
 from pydantic import BaseModel, Field
 
 from app.api.routes.pull_requests import resolve_installation_id
+from app.api.websocket import broadcast_pipeline_event
 from app.ast import analyze_conflicted_file
 from app.context.extractor import extract_repository_context
+from app.db.database import (
+    create_merge_run,
+    get_merge_runs_by_pr,
+    record_human_decision,
+    record_merge_attempt,
+    update_merge_run_status,
+    upsert_conflict,
+)
+from app.db.models import HumanDecisionRequest
 from app.git.conflicts import (
     GitConflictError,
     checkout_pr_baseline,
@@ -537,6 +547,14 @@ async def resolve_merge_workflow_endpoint(
             except Exception as clone_err:
                 logger.warning("Baseline checkout error, proceeding in isolated target workspace: %s", clone_err)
 
+            channel_id = f"{owner}_{repo}_{pull_number}"
+            await broadcast_pipeline_event(
+                channel_id=channel_id,
+                stage="workflow_started",
+                status="in_progress",
+                details={"file": target_path, "max_retries": max_retries},
+            )
+
             final_state = await run_merge_workflow(
                 conflicted_file=target_conflict,
                 repository_context=repo_ctx.model_dump() if repo_ctx else None,
@@ -544,7 +562,57 @@ async def resolve_merge_workflow_endpoint(
                 max_retries=max_retries,
             )
 
-            return dict(final_state)
+            # Persist run and attempts into SQLite database (Phase 7 & 8)
+            repo_full_name = f"{owner}/{repo}".lower()
+            run_record = create_merge_run(
+                repository_full_name=repo_full_name,
+                pull_request_number=pull_number,
+                file_path=target_path,
+                status=final_state.get("status", "unknown"),
+            )
+            run_id = run_record["id"]
+
+            for att in final_state.get("history", []):
+                prop = att.get("proposal", {})
+                ver = att.get("verification", {})
+                record_merge_attempt(
+                    merge_run_id=run_id,
+                    attempt_number=att.get("attempt_number", 1),
+                    model_used=prop.get("model", ""),
+                    resolved_code=prop.get("merged_code", ""),
+                    reasoning=prop.get("reasoning", ""),
+                    confidence=prop.get("confidence", 0.0),
+                    verification_passed=ver.get("success", False),
+                    security_passed=ver.get("security_audit", {}).get("success", False),
+                    failure_reason=att.get("feedback_provided", ""),
+                )
+
+            prop = final_state.get("current_proposal") or {}
+            exp = final_state.get("explanation")
+            exp_text = None
+            if isinstance(exp, dict):
+                exp_text = exp.get("human_readable_summary") or str(exp)
+            elif exp:
+                exp_text = str(exp)
+
+            updated_run = update_merge_run_status(
+                merge_run_id=run_id,
+                status=final_state.get("status", "unknown"),
+                resolved_code=prop.get("merged_code"),
+                explanation=exp_text,
+            )
+
+            final_dict = dict(final_state)
+            final_dict["merge_run_id"] = run_id
+
+            await broadcast_pipeline_event(
+                channel_id=channel_id,
+                stage="workflow_completed",
+                status=final_state.get("status", "unknown"),
+                details={"run_id": run_id, "status": final_state.get("status")},
+            )
+
+            return final_dict
 
     except HTTPException:
         raise
@@ -565,5 +633,111 @@ async def resolve_merge_workflow_endpoint(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Workflow execution failed: {str(exc)}",
         ) from exc
+
+
+@router.post(
+    "/repositories/{owner}/{repo}/pulls/{pull_number}/decision",
+    response_model=Dict[str, Any],
+)
+async def submit_human_decision(
+    owner: str,
+    repo: str,
+    pull_number: int,
+    request: Request,
+    body: HumanDecisionRequest,
+    run_id: Optional[str] = Query(default=None, description="Optional MergeRun ID to attach decision to"),
+    installation_id_cookie: Optional[str] = Cookie(
+        default=None,
+        alias="installation_id",
+        description="GitHub App installation ID stored in HttpOnly cookie",
+    ),
+    installation_id_query: Optional[int] = Query(
+        default=None,
+        alias="installation_id",
+        description="Optional installation ID override",
+    ),
+    installation_id_header: Optional[str] = Header(
+        default=None,
+        alias="x-installation-id",
+        description="Optional installation ID provided via HTTP header",
+    ),
+) -> Dict[str, Any]:
+    """
+    Phase 8 Human-in-the-Loop review decision endpoint.
+
+    Allows the developer to inspect and assert final authority over any AI resolution:
+    - ACCEPT: Approve the AI-proposed merge resolution.
+    - EDIT: Apply developer-modified code from the Monaco Editor.
+    - REJECT: Discard the AI proposal and escalate to manual Git conflict resolution.
+    """
+    target_installation_id = resolve_installation_id(
+        request=request,
+        installation_id_cookie=installation_id_cookie,
+        installation_id_header=installation_id_header,
+        installation_id_query=installation_id_query,
+        endpoint_name=f"POST /repositories/{owner}/{repo}/pulls/{pull_number}/decision",
+    )
+
+    repo_full_name = f"{owner}/{repo}".lower()
+
+    # Find target run
+    target_run_id = run_id
+    if not target_run_id:
+        existing_runs = get_merge_runs_by_pr(repo_full_name, pull_number)
+        if existing_runs:
+            target_run_id = existing_runs[0]["id"]
+        else:
+            # Create a run record to anchor the decision
+            new_run = create_merge_run(
+                repository_full_name=repo_full_name,
+                pull_request_number=pull_number,
+                file_path=body.file_path,
+                status="human_review",
+            )
+            target_run_id = new_run["id"]
+
+    updated_run = record_human_decision(
+        merge_run_id=target_run_id,
+        decision=body.decision,
+        final_code=body.final_code,
+    )
+
+    channel_id = f"{owner}_{repo}_{pull_number}"
+    await broadcast_pipeline_event(
+        channel_id=channel_id,
+        stage="human_decision_recorded",
+        status=f"human_{body.decision}ed",
+        details={
+            "run_id": target_run_id,
+            "decision": body.decision,
+            "file": body.file_path,
+        },
+    )
+
+    logger.info("Human review decision '%s' recorded for %s PR #%d (run=%s)", body.decision, repo_full_name, pull_number, target_run_id)
+
+    return {
+        "status": "success",
+        "action": body.decision,
+        "run_id": target_run_id,
+        "file_path": body.file_path,
+        "merge_run": updated_run,
+        "message": f"Merge resolution successfully {body.decision}ed by human developer.",
+    }
+
+
+@router.get(
+    "/repositories/{owner}/{repo}/pulls/{pull_number}/merge-runs",
+    response_model=list[Dict[str, Any]],
+)
+def get_pr_merge_runs(
+    owner: str,
+    repo: str,
+    pull_number: int,
+) -> list[Dict[str, Any]]:
+    """Retrieve historical merge runs, retry attempts, and human decisions for a pull request."""
+    repo_full_name = f"{owner}/{repo}".lower()
+    return get_merge_runs_by_pr(repo_full_name, pull_number)
+
 
 

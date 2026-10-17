@@ -43,3 +43,27 @@ export async function fetchAllInstallations() {
   }
 }
 
+/**
+ * Submit human decision (accept, edit, or reject) on a proposed merge resolution.
+ */
+export async function submitMergeDecision(owner, repo, pullNumber, decisionData, runId = null) {
+  const query = runId ? `?run_id=${encodeURIComponent(runId)}` : '';
+  return apiJson(`/api/github/repositories/${owner}/${repo}/pulls/${pullNumber}/decision${query}`, {
+    method: 'POST',
+    body: JSON.stringify(decisionData),
+  });
+}
+
+/**
+ * Fetch past merge runs and human decisions for a pull request.
+ */
+export async function fetchMergeRuns(owner, repo, pullNumber) {
+  try {
+    return await apiJson(`/api/github/repositories/${owner}/${repo}/pulls/${pullNumber}/merge-runs`);
+  } catch (err) {
+    console.warn('Failed to fetch past merge runs:', err);
+    return [];
+  }
+}
+
+

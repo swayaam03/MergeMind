@@ -125,6 +125,7 @@ export default function PullRequest() {
       }
 
       setRepositoryContext(data);
+      setContextError(null);
     } catch (err) {
       console.error('Error fetching repository context:', err);
       setContextError(err.message || 'Failed to extract repository context.');
@@ -1203,8 +1204,15 @@ export default function PullRequest() {
 
                     {/* Error State */}
                     {!loadingContext && contextError && (
-                      <div className="p-3 rounded-xl bg-rose-950/30 border border-rose-500/20 text-xs text-rose-300">
-                        {contextError}
+                      <div className="p-3 rounded-xl bg-rose-950/30 border border-rose-500/20 text-xs text-rose-300 flex items-center justify-between gap-2">
+                        <span className="truncate">{contextError}</span>
+                        <button
+                          type="button"
+                          onClick={() => fetchRepositoryContext(conflictData?.conflicting_files || [])}
+                          className="neu-button px-2.5 py-1 rounded-lg text-xs font-mono text-rose-200 hover:text-white border border-rose-500/30 hover:bg-rose-500/20 transition-colors flex-shrink-0"
+                        >
+                          Retry
+                        </button>
                       </div>
                     )}
 

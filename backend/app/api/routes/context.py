@@ -8,6 +8,13 @@ from fastapi import APIRouter, Cookie, Header, HTTPException, Query, Request, st
 from app.api.routes.pull_requests import resolve_installation_id
 from app.ast import analyze_conflicted_file
 from app.context.extractor import extract_repository_context
+from app.context.models import (
+    DocumentationContext,
+    ProjectInfo,
+    RepositoryContext,
+    RepositoryRef,
+    StructureContext,
+)
 from app.git.conflicts import simulate_merge_and_extract_conflicts
 from app.git.github import (
     GitHubAPIError,
@@ -144,18 +151,36 @@ def get_repository_context(
                 )
 
         # 4. Extract repository context
-        context_result = extract_repository_context(
-            owner=owner,
-            repo=repo,
-            token=installation_token,
-            base_ref=base_ref,
-            head_ref=head_ref,
-            conflicting_files=conflicts_list,
-            ast_analyses=ast_analyses,
-            conflict_sources=conflict_sources,
-        )
-
-        return context_result.model_dump()
+        try:
+            context_result = extract_repository_context(
+                owner=owner,
+                repo=repo,
+                token=installation_token,
+                base_ref=base_ref,
+                head_ref=head_ref,
+                conflicting_files=conflicts_list,
+                ast_analyses=ast_analyses,
+                conflict_sources=conflict_sources,
+            )
+            return context_result.model_dump()
+        except GitHubAPIError as exc:
+            logger.warning(
+                "Deep repository context extraction failed for %s/%s PR #%d: %s. Providing baseline context.",
+                owner,
+                repo,
+                pull_number,
+                exc,
+            )
+            fallback = RepositoryContext(
+                repository=RepositoryRef(owner=owner, name=repo),
+                project=ProjectInfo(languages=["python"]),
+                documentation=DocumentationContext(files=[]),
+                structure=StructureContext(tree=f"{repo}/\n└── (git tree temporarily unavailable from GitHub)"),
+                relevant_files=[],
+                base_ref=base_ref,
+                head_ref=head_ref,
+            )
+            return fallback.model_dump()
 
     except HTTPException:
         raise

@@ -110,16 +110,108 @@ def generate_jwt(expires_in_seconds: int = 600) -> str:
     return f"{header_b64}.{payload_b64}.{signature_b64}"
 
 
+# In-memory cache for GitHub installation access tokens:
+# installation_id -> (token_str, expire_timestamp_epoch)
+_INSTALLATION_TOKEN_CACHE: dict[int, tuple[str, float]] = {}
+_TOKEN_CACHE_TTL_SECONDS = 3000  # 50 minutes (GitHub tokens are valid for 60m)
+
+# Shared connection pool for GitHub API requests.
+# Keeps a warm TCP+TLS connection alive across calls, avoiding repeated
+# handshake storms on slow or unstable networks.
+_github_pool: httpx.Client | None = None
+
+
+def _get_github_pool() -> httpx.Client:
+    """Return (and lazily create) the shared httpx connection pool for GitHub."""
+    global _github_pool
+    if _github_pool is None or _github_pool.is_closed:
+        _github_pool = httpx.Client(
+            timeout=httpx.Timeout(connect=30.0, read=45.0, write=30.0, pool=30.0),
+            limits=httpx.Limits(max_connections=10, max_keepalive_connections=5),
+        )
+    return _github_pool
+
+
+def make_github_request(
+    method: str,
+    url: str,
+    headers: dict[str, str],
+    params: dict[str, Any] | None = None,
+    json_data: Any = None,
+    client: httpx.Client | None = None,
+    max_retries: int = 3,
+    timeout: float = 45.0,
+) -> httpx.Response:
+    """Execute GitHub API HTTP request with automatic retries and exponential backoff.
+
+    Uses a shared connection pool when no explicit client is provided,
+    keeping TLS sessions warm and avoiding redundant handshakes.
+    """
+    # Use the shared pool when no explicit client is injected (tests inject mocks)
+    use_pool = client is None
+    last_error: Exception | None = None
+    m = method.upper()
+
+    for attempt in range(max_retries):
+        current_client = client if not use_pool else _get_github_pool()
+
+        try:
+            if m == "GET" and hasattr(current_client, "get"):
+                return current_client.get(url, headers=headers, params=params)
+            elif m == "POST" and hasattr(current_client, "post"):
+                if json_data is not None:
+                    return current_client.post(url, headers=headers, json=json_data)
+                return current_client.post(url, headers=headers)
+            elif m == "PATCH" and hasattr(current_client, "patch"):
+                return current_client.patch(url, headers=headers, json=json_data)
+            elif hasattr(current_client, "request"):
+                return current_client.request(method=method, url=url, headers=headers, params=params, json=json_data)
+            else:
+                raise GitHubAPIError("Invalid HTTP client provided.", status_code=500)
+        except (httpx.RequestError, httpx.HTTPError) as exc:
+            last_error = exc
+            wait = min(1.0 * (2 ** attempt), 8.0)
+            logger.warning(
+                "GitHub API request %s %s failed (attempt %d/%d): %s. Retrying in %.1fs...",
+                m,
+                url,
+                attempt + 1,
+                max_retries,
+                exc,
+                wait,
+            )
+            # If the pool connection went stale, recreate it before the next attempt
+            if use_pool:
+                global _github_pool
+                try:
+                    if _github_pool is not None:
+                        _github_pool.close()
+                except Exception:
+                    pass
+                _github_pool = None
+            time.sleep(wait)
+
+    raise GitHubAPIError(f"Failed to reach GitHub API: {last_error}", status_code=502) from last_error
+
+
 def get_installation_access_token(
     installation_id: int,
     client: httpx.Client | None = None,
+    force_refresh: bool = False,
 ) -> str:
     """
     Exchange the GitHub App JWT for a scoped installation access token.
 
     POST /app/installations/{installation_id}/access_tokens
     The returned token must remain strictly backend-only.
+    Caches token in-memory for 50 minutes to prevent API storms.
     """
+    now = time.time()
+    if not force_refresh and client is None and installation_id in _INSTALLATION_TOKEN_CACHE:
+        cached_token, expire_at = _INSTALLATION_TOKEN_CACHE[installation_id]
+        if now < expire_at:
+            return cached_token
+
     jwt_token = generate_jwt()
     url = f"{GITHUB_API_BASE}/app/installations/{installation_id}/access_tokens"
     headers = {
@@ -128,25 +220,16 @@ def get_installation_access_token(
         "X-GitHub-Api-Version": GITHUB_API_VERSION,
     }
 
-    owns_client = False
-    if client is None:
-        client = httpx.Client(timeout=10.0)
-        owns_client = True
-
-    try:
-        response = client.post(url, headers=headers)
-    except httpx.RequestError as exc:
-        raise GitHubAPIError("Failed to reach GitHub API.", status_code=502) from exc
-    finally:
-        if owns_client:
-            client.close()
+    response = make_github_request("POST", url, headers=headers, client=client)
 
     if response.status_code == 201:
         token_data = response.json()
         token = token_data.get("token")
         if not token:
             raise GitHubAuthError("Missing access token in GitHub response.")
-        return str(token)
+        token_str = str(token)
+        _INSTALLATION_TOKEN_CACHE[installation_id] = (token_str, now + _TOKEN_CACHE_TTL_SECONDS)
+        return token_str
 
     if response.status_code == 404:
         raise GitHubAPIError("GitHub App installation not found.", status_code=404)
@@ -175,18 +258,7 @@ def get_installation_repositories(
         "X-GitHub-Api-Version": GITHUB_API_VERSION,
     }
 
-    owns_client = False
-    if client is None:
-        client = httpx.Client(timeout=10.0)
-        owns_client = True
-
-    try:
-        response = client.get(url, headers=headers)
-    except httpx.RequestError as exc:
-        raise GitHubAPIError("Failed to reach GitHub API.", status_code=502) from exc
-    finally:
-        if owns_client:
-            client.close()
+    response = make_github_request("GET", url, headers=headers, client=client)
 
     if response.status_code == 200:
         data = response.json()
@@ -243,35 +315,30 @@ def list_all_app_installations(client: httpx.Client | None = None) -> list[dict[
         "X-GitHub-Api-Version": GITHUB_API_VERSION,
     }
 
-    should_close = False
-    if client is None:
-        client = httpx.Client(timeout=15.0)
-        should_close = True
+    response = make_github_request(
+        "GET",
+        f"{GITHUB_API_BASE}/app/installations",
+        headers=headers,
+        client=client,
+    )
 
-    try:
-        response = client.get(f"{GITHUB_API_BASE}/app/installations", headers=headers)
-        if response.status_code != 200:
-            raise GitHubAPIError("Failed to list GitHub App installations", status_code=response.status_code)
+    if response.status_code != 200:
+        raise GitHubAPIError("Failed to list GitHub App installations", status_code=response.status_code)
 
-        data = response.json()
-        installations = []
-        for inst in data:
-            acc = inst.get("account") or {}
-            installations.append({
-                "id": inst["id"],
-                "account_login": acc.get("login", ""),
-                "account_type": acc.get("type", "User"),
-                "avatar_url": acc.get("avatar_url", ""),
-                "repository_selection": inst.get("repository_selection", "all"),
-                "html_url": inst.get("html_url", ""),
-                "target_id": inst.get("target_id"),
-            })
-        return installations
-    except httpx.RequestError as exc:
-        raise GitHubAPIError(f"Network error querying GitHub App installations: {exc}") from exc
-    finally:
-        if should_close:
-            client.close()
+    data = response.json()
+    installations = []
+    for inst in data:
+        acc = inst.get("account") or {}
+        installations.append({
+            "id": inst["id"],
+            "account_login": acc.get("login", ""),
+            "account_type": acc.get("type", "User"),
+            "avatar_url": acc.get("avatar_url", ""),
+            "repository_selection": inst.get("repository_selection", "all"),
+            "html_url": inst.get("html_url", ""),
+            "target_id": inst.get("target_id"),
+        })
+    return installations
 
 
 
@@ -337,18 +404,7 @@ def get_repository_pull_requests(
         "X-GitHub-Api-Version": GITHUB_API_VERSION,
     }
 
-    owns_client = False
-    if client is None:
-        client = httpx.Client(timeout=10.0)
-        owns_client = True
-
-    try:
-        response = client.get(url, params=params, headers=headers)
-    except httpx.RequestError as exc:
-        raise GitHubAPIError("Failed to reach GitHub API.", status_code=502) from exc
-    finally:
-        if owns_client:
-            client.close()
+    response = make_github_request("GET", url, headers=headers, params=params, client=client)
 
     if response.status_code == 200:
         return response.json()
@@ -452,18 +508,7 @@ def get_pull_request_detail(
         "X-GitHub-Api-Version": GITHUB_API_VERSION,
     }
 
-    owns_client = False
-    if client is None:
-        client = httpx.Client(timeout=10.0)
-        owns_client = True
-
-    try:
-        response = client.get(url, headers=headers)
-    except httpx.RequestError as exc:
-        raise GitHubAPIError("Failed to reach GitHub API.", status_code=502) from exc
-    finally:
-        if owns_client:
-            client.close()
+    response = make_github_request("GET", url, headers=headers, client=client)
 
     if response.status_code == 200:
         return response.json()

@@ -1,3 +1,6 @@
+import os
+os.environ["LITELLM_LOCAL_MODEL_COST_MAP"] = "True"
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 

@@ -3,9 +3,13 @@
 import asyncio
 import json
 import logging
+import os
 import re
 import time
 from typing import Any, Dict, Optional
+
+# Prevent LiteLLM from blocking on raw.githubusercontent.com downloads
+os.environ["LITELLM_LOCAL_MODEL_COST_MAP"] = "True"
 
 import litellm
 
@@ -15,6 +19,7 @@ from app.llm.schemas import MergeProposal
 logger = logging.getLogger(__name__)
 
 # Suppress litellm noisy telemetry & verbose logging
+os.environ["LITELLM_LOCAL_MODEL_COST_MAP"] = "True"
 litellm.telemetry = False
 litellm.drop_params = True
 

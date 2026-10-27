@@ -89,6 +89,22 @@ def truncate_output(text: str, max_bytes: int = 500_000) -> str:
     return f"{truncated}\n\n[... Truncated by MergeMind sandbox after {max_bytes} bytes ...]"
 
 
+def _find_docker_cli() -> Optional[str]:
+    """Find docker CLI binary via PATH or standard Windows install locations."""
+    cli = shutil.which("docker")
+    if cli:
+        return cli
+    candidates = [
+        r"C:\Program Files\Docker\Docker\resources\bin\docker.exe",
+        os.path.expandvars(r"%LOCALAPPDATA%\Programs\DockerDesktop\resources\bin\docker.exe"),
+        os.path.expandvars(r"%ProgramFiles%\Docker\Docker\resources\bin\docker.exe"),
+    ]
+    for candidate in candidates:
+        if os.path.isfile(candidate):
+            return candidate
+    return None
+
+
 class DockerSandboxRunner:
     """
     Executes commands inside locked-down, ephemeral Docker containers.
@@ -108,7 +124,7 @@ class DockerSandboxRunner:
         self.default_memory = default_memory
         self.default_pids_limit = default_pids_limit
         self.network_mode = network_mode
-        self._docker_cli_path: Optional[str] = shutil.which("docker")
+        self._docker_cli_path: Optional[str] = _find_docker_cli()
 
     def is_available(self) -> bool:
         """
@@ -116,10 +132,12 @@ class DockerSandboxRunner:
         Checks both Python docker SDK and Docker CLI.
         """
         # Try docker CLI first
-        if self._docker_cli_path:
+        cli_path = self._docker_cli_path or _find_docker_cli()
+        if cli_path:
+            self._docker_cli_path = cli_path
             try:
                 res = subprocess.run(
-                    [self._docker_cli_path, "info", "--format", "{{.ServerVersion}}"],
+                    [cli_path, "info", "--format", "{{.ServerVersion}}"],
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
                     text=True,
@@ -278,11 +296,13 @@ class DockerSandboxRunner:
         environment: Dict[str, str],
     ) -> ContainerExecutionResult:
         """Execute container using the docker CLI binary as fallback."""
-        if not self._docker_cli_path:
+        cli_path = self._docker_cli_path or _find_docker_cli()
+        if not cli_path:
             raise DockerUnavailableError("Docker CLI binary not found on PATH.")
+        self._docker_cli_path = cli_path
 
         cli_cmd: List[str] = [
-            self._docker_cli_path,
+            cli_path,
             "run",
             "--rm",
             f"--network={config.network_mode}",

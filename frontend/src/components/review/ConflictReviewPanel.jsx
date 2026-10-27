@@ -305,9 +305,17 @@ export default function ConflictReviewPanel({
 
             <div className="flex items-center justify-between text-xs font-mono">
               <span className="text-slate-400">Sandbox Test:</span>
-              {verificationReport?.test_execution?.passed ? (
+              {verificationReport?.overall_status === 'PASSED' ? (
                 <span className="text-emerald-400 flex items-center gap-1">
                   <CheckCircle2 className="w-3 h-3" /> Passed
+                </span>
+              ) : verificationReport?.overall_status === 'FAILED' ? (
+                <span className="text-rose-400 flex items-center gap-1">
+                  <AlertTriangle className="w-3 h-3" /> Failed
+                </span>
+              ) : verificationReport ? (
+                <span className="text-amber-400 flex items-center gap-1">
+                  <AlertTriangle className="w-3 h-3" /> Error
                 </span>
               ) : (
                 <span className="text-amber-400 flex items-center gap-1">
@@ -318,9 +326,13 @@ export default function ConflictReviewPanel({
 
             <div className="flex items-center justify-between text-xs font-mono">
               <span className="text-slate-400">Semgrep Audit:</span>
-              {verificationReport?.security_audit?.findings?.length === 0 ? (
+              {verificationReport?.security?.status === 'PASS' ? (
                 <span className="text-emerald-400 flex items-center gap-1">
-                  <ShieldCheck className="w-3 h-3" /> 0 findings
+                  <ShieldCheck className="w-3 h-3" /> {verificationReport.security.failing_items?.length || 0} findings
+                </span>
+              ) : verificationReport?.security?.status === 'FAIL' ? (
+                <span className="text-rose-400 flex items-center gap-1">
+                  <ShieldAlert className="w-3 h-3" /> {verificationReport.security.failing_items?.length || 0} findings
                 </span>
               ) : (
                 <span className="text-slate-400">Clean</span>

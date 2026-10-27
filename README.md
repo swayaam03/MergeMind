@@ -180,20 +180,6 @@ MergeMind integrates directly with GitHub using a dedicated **GitHub App**.
 
 ---
 
-## Demo / Presentation Checklist
-
-Use this checklist before a live demo:
-
-- [ ] Docker Desktop is **running** (green whale icon in system tray)
-- [ ] Sandbox images are pre-pulled (`python:3.11-slim`, `node:20-slim`, `openjdk:17-slim`)
-- [ ] `.env` has a **valid** (non-expired) `OPENROUTER_API_KEY`
-- [ ] Backend is running: `python -m uvicorn app.main:app --reload --port 8000`
-- [ ] Frontend is running: `npm run dev`
-- [ ] Open a PR with merge conflicts in your test repo
-- [ ] Click **"Generate Merge Proposal"** → AI proposes resolution
-- [ ] Click **"Verify Merge Proposal"** → Should show **"Docker: Isolated"** + all 4 stages
-- [ ] Use the **Accept / Edit / Reject** buttons to demonstrate human-in-the-loop
-
 ### Quick Smoke Test
 
 ```powershell

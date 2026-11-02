@@ -181,7 +181,7 @@ In `backend/app/ast/classifier.py`, MergeMind categorizes conflicts into exactly
 - **Why this design?**
   Instead of feeding an LLM a blind prompt saying "fix this conflict", the classifier passes the exact conflict classification to the prompt. If the category is `IMPORT_IMPORT`, the agent knows both sides want dependencies and does not hallucinate logic changes. If it is `DELETE_MODIFY`, the prompt instructs the agent to analyze whether callers still rely on the deleted function.
 
-### 4.3 Why LangGraph StateGraph over Linear Scripts or Autonomous Swarms
+### 4.3 Why LangGraph StateGraph over Linear Scripts or Autonomous Swarms 
 
 - **The Alternative 1 (Linear Python Script):** A procedural loop (`for attempt in range(3): ...`) becomes deeply tangled when managing asynchronous events, WebSocket state broadcasts, checkpoint rollbacks, human-in-the-loop pauses, and conditional branching.
 - **The Alternative 2 (Autonomous Multi-Agent Swarms / AutoGen / CrewAI):** Free-form conversational agent swarms (where agents chat back and forth until consensus) introduce non-deterministic loops, token explosion, unpredictable latency, and frequent drift from the original source code.

@@ -33,6 +33,10 @@ class MergeProposal(BaseModel):
         default=None,
         description="Repository-relative file path of the conflicted file",
     )
+    language: Optional[str] = Field(
+        default=None,
+        description="Language of the conflicted file",
+    )
     model: Optional[str] = Field(
         default=None,
         description="LLM model used to generate this merge proposal",

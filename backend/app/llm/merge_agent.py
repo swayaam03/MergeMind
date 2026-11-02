@@ -46,9 +46,11 @@ class MergeAgent:
             user_prompt=user_prompt,
         )
 
-        # Attach target file path
+        # Attach target file path and language
         if not proposal.file_path and path:
             proposal.file_path = path
+        if not proposal.language and conflicted_file.get("language"):
+            proposal.language = conflicted_file.get("language")
 
         # Enforce status semantics
         if proposal.status == "resolved" and not proposal.merged_code.strip():

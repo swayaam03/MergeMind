@@ -33,9 +33,11 @@ class Settings(BaseSettings):
     # LLM Merge Agent Configuration (LiteLLM / OpenRouter)
     LLM_PROVIDER: str = "openrouter"
     LLM_MODEL: str = "openai/gpt-4o-mini"
+    LLM_FALLBACK_MODELS: str = ""  # Comma-separated fallback model names
     OPENROUTER_API_KEY: str = ""
     LLM_TEMPERATURE: float = 0.1
-    LLM_TIMEOUT_SECONDS: int = 60
+    LLM_TIMEOUT_SECONDS: int = 180
+    LLM_MAX_RETRIES: int = 2
     MERGEMIND_RUN_LLM_INTEGRATION_TESTS: bool = False
 
     # Docker Sandbox Verification Settings (Phase 5)

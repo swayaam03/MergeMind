@@ -12,6 +12,7 @@ Covers:
 9. Optional real OpenRouter integration test (gated)
 """
 
+import asyncio
 import json
 import os
 from typing import Any
@@ -419,6 +420,42 @@ async def test_llm_client_empty_response():
         mock_acompletion.return_value = mock_response
         with pytest.raises(LLMResponseParsingError):
             await client.complete_merge_proposal("system", "user")
+
+
+@pytest.mark.asyncio
+async def test_llm_client_fallback_on_primary_timeout():
+    """Verify LLM client attempts fallback model when primary model times out."""
+    client = LLMClient(
+        model="openrouter/primary-model",
+        fallback_models=["openrouter/fallback-model"],
+        api_key="mock-key",
+        timeout_seconds=1,
+    )
+
+    call_count = 0
+    fallback_json = {
+        "status": "resolved",
+        "merged_code": "def hello(): pass",
+        "explanation": "Resolved by fallback",
+        "preserved_changes": ["change1"],
+        "risks": [],
+    }
+
+    async def mock_call(**kwargs):
+        nonlocal call_count
+        call_count += 1
+        if kwargs.get("model") == "openrouter/primary-model":
+            await asyncio.sleep(2)  # will trigger wait_for timeout
+            return {}
+        return {"choices": [{"message": {"content": json.dumps(fallback_json)}}]}
+
+    with patch("litellm.acompletion", side_effect=mock_call):
+        proposal = await client.complete_merge_proposal("system", "user")
+        assert proposal.status == "resolved"
+        assert proposal.merged_code == "def hello(): pass"
+        assert proposal.model == "openrouter/fallback-model"
+        assert call_count == 2
+
 
 
 # ---------------------------------------------------------------------------

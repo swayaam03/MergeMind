@@ -280,10 +280,12 @@ export default function PullRequest() {
         proposalData.file_path ||
         (conflictData?.conflicts?.[0]?.path) ||
         'modified_file';
-      const language =
+      const rawLanguage =
         proposalData.language ||
         (conflictData?.conflicts?.[0]?.language) ||
         'unknown';
+      const supportedLanguages = ['python', 'javascript', 'typescript', 'java', 'unknown'];
+      const language = supportedLanguages.includes(rawLanguage) ? rawLanguage : 'unknown';
 
       const token = localStorage.getItem('mergemind_token');
       const response = await fetch(apiUrl, {
@@ -296,7 +298,7 @@ export default function PullRequest() {
         credentials: 'include',
         body: JSON.stringify({
           target_file: targetFile,
-          merged_code: proposalData.merged_code,
+          merged_code: proposalData.merged_code || '',
           language: language,
         }),
       });

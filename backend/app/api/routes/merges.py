@@ -288,9 +288,9 @@ async def generate_merge_proposal(
 class VerifyProposalRequest(BaseModel):
     """Payload for deterministic verification of a proposed merge."""
 
-    target_file: str = Field(..., description="Path of conflicted file being verified")
-    merged_code: str = Field(..., description="Proposed resolved merged code")
-    language: Optional[LanguageType] = Field(default=None, description="Optional language hint")
+    target_file: Optional[str] = Field(default="", description="Path of conflicted file being verified")
+    merged_code: Optional[str] = Field(default="", description="Proposed resolved merged code")
+    language: Optional[str] = Field(default=None, description="Optional language hint")
 
 
 @router.post(
@@ -342,6 +342,15 @@ def verify_proposal(
         installation_token = get_installation_access_token(target_installation_id)
         pr_detail = get_pull_request_detail(owner, repo, pull_number, installation_token)
 
+        target_file = (body.target_file or "").strip() or "modified_file"
+        merged_code = body.merged_code or ""
+
+        # Normalize language hint: accept any string, filter to valid LanguageType for verifier
+        valid_langs = {"python", "javascript", "typescript", "java", "unknown"}
+        normalized_lang: Optional[LanguageType] = (
+            body.language if body.language in valid_langs else None
+        )
+
         with tempfile.TemporaryDirectory() as tmpdir:
             temp_path = Path(tmpdir)
             try:
@@ -359,15 +368,15 @@ def verify_proposal(
                     clone_err,
                 )
                 # Create directory structure for target file if baseline clone is unreachable
-                target_p = temp_path / body.target_file
+                target_p = temp_path / target_file
                 target_p.parent.mkdir(parents=True, exist_ok=True)
-                target_p.write_text(body.merged_code, encoding="utf-8")
+                target_p.write_text(merged_code, encoding="utf-8")
 
             report = verify_merge_proposal(
                 source_dir=temp_path,
-                target_file=body.target_file,
-                merged_code=body.merged_code,
-                language=body.language,
+                target_file=target_file,
+                merged_code=merged_code,
+                language=normalized_lang,
             )
             return report
 

@@ -365,6 +365,8 @@ class SemgrepSecurityScanner:
         )
 
         res = self.runner.run_in_sandbox(workspace.path, config)
+        if res.exit_code != 0 or not (res.stdout and res.stdout.strip()):
+            raise RuntimeError(f"Docker Semgrep execution failed (exit {res.exit_code}): {res.stderr}")
         return parse_semgrep_json_output(res.stdout, workspace.target_file)
 
     def _run_semgrep_cli(self, semgrep_bin: str, file_path: Path, rel_path: str) -> List[SecurityFinding]:
@@ -378,6 +380,8 @@ class SemgrepSecurityScanner:
             errors="replace",
             timeout=30,
         )
+        if proc.returncode != 0 or not (proc.stdout and proc.stdout.strip()):
+            raise RuntimeError(f"Semgrep CLI execution failed (exit {proc.returncode}): {proc.stderr}")
         return parse_semgrep_json_output(proc.stdout or "", rel_path)
 
     def _create_scan_result(

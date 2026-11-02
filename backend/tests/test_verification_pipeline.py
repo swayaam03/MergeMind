@@ -103,3 +103,33 @@ def test_verify_proposal_api_endpoint(mock_checkout, mock_pr, mock_token, mock_i
     assert data["syntax"]["status"] == "PASS"
     assert data["security"]["status"] == "PASS"
     assert "docker_used" in data
+
+
+@patch("app.api.routes.merges.resolve_installation_id", return_value=12345)
+@patch("app.api.routes.merges.get_installation_access_token", return_value="fake_token")
+@patch("app.api.routes.merges.get_pull_request_detail")
+@patch("app.api.routes.merges.checkout_pr_baseline")
+def test_verify_proposal_arbitrary_language(mock_checkout, mock_pr, mock_token, mock_install):
+    """Test POST /verify-proposal accepts arbitrary or non-standard languages without 422."""
+    mock_pr.return_value = {
+        "number": 1,
+        "base_ref": "main",
+        "base_sha": "abc1234",
+    }
+
+    payload = {
+        "target_file": "README.md",
+        "merged_code": "# Title\n\nSome doc content\n",
+        "language": "markdown",
+    }
+
+    res = client.post(
+        "/api/github/repositories/testowner/testrepo/pulls/1/verify-proposal",
+        json=payload,
+        cookies={"installation_id": "12345"},
+    )
+
+    assert res.status_code == 200
+    data = res.json()
+    assert "overall_status" in data
+    assert data["syntax"]["status"] == "SKIPPED"

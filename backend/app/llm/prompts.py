@@ -71,7 +71,7 @@ def is_sensitive_path(path: str) -> bool:
 def build_merge_prompt(
     conflicted_file: Dict[str, Any],
     repository_context: Optional[RepositoryContext] = None,
-    max_context_chars: int = 25_000,
+    max_context_chars: int = 15_000,
     retry_feedback: Optional[str] = None,
 ) -> str:
     """
@@ -162,10 +162,13 @@ def build_merge_prompt(
     # Secondary context budget enforcement
     total_secondary = len(docs_section) + len(tree_section) + len(relevant_files_section)
     if total_secondary > max_context_chars:
-        # Gracefully bound documentation and tree
-        docs_section = docs_section[:8000] + ("\n... [truncated for token budget]" if len(docs_section) > 8000 else "")
-        tree_section = tree_section[:5000] + ("\n... [truncated for token budget]" if len(tree_section) > 5000 else "")
-        relevant_files_section = relevant_files_section[:12000] + ("\n... [truncated for token budget]" if len(relevant_files_section) > 12000 else "")
+        doc_limit = max(1000, int(max_context_chars * 0.30))
+        tree_limit = max(500, int(max_context_chars * 0.20))
+        rel_limit = max(1000, int(max_context_chars * 0.50))
+
+        docs_section = docs_section[:doc_limit] + ("\n... [truncated for token budget]" if len(docs_section) > doc_limit else "")
+        tree_section = tree_section[:tree_limit] + ("\n... [truncated for token budget]" if len(tree_section) > tree_limit else "")
+        relevant_files_section = relevant_files_section[:rel_limit] + ("\n... [truncated for token budget]" if len(relevant_files_section) > rel_limit else "")
 
     prompt = f"""=== MERGEMIND MERGE REQUEST ===
 

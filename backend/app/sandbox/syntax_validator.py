@@ -249,6 +249,8 @@ class DeterministicValidator:
                     proc = subprocess.run(
                         [node_path, "--check", str(target_to_check)],
                         text=True,
+                        encoding="utf-8",
+                        errors="replace",
                         stdout=subprocess.PIPE,
                         stderr=subprocess.PIPE,
                         timeout=5,
@@ -347,6 +349,8 @@ class DeterministicValidator:
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
                     text=True,
+                    encoding="utf-8",
+                    errors="replace",
                     timeout=15,
                 )
                 if proc.returncode == 0:

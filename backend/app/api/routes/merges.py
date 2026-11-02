@@ -178,9 +178,9 @@ async def generate_merge_proposal(
         for c in conflicts:
             ast_res = analyze_conflicted_file(
                 path=c["path"],
-                base_code=c.get("base", ""),
-                local_code=c.get("local", ""),
-                remote_code=c.get("remote", ""),
+                base_code=c.get("base") or "",
+                local_code=c.get("local") or "",
+                remote_code=c.get("remote") or "",
             )
             c["ast_analysis"] = ast_res.model_dump()
 
@@ -508,9 +508,9 @@ async def resolve_merge_workflow_endpoint(
         target_path = target_conflict.get("path", "")
         ast_result = analyze_conflicted_file(
             path=target_path,
-            base_code=target_conflict.get("base", ""),
-            local_code=target_conflict.get("local", ""),
-            remote_code=target_conflict.get("remote", ""),
+            base_code=target_conflict.get("base") or "",
+            local_code=target_conflict.get("local") or "",
+            remote_code=target_conflict.get("remote") or "",
         )
         target_conflict["ast_analysis"] = ast_result.model_dump()
 

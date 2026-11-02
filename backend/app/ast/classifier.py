@@ -298,17 +298,17 @@ def classify_conflict(
 
 def analyze_conflicted_file(
     path: str,
-    base_code: str,
-    local_code: str,
-    remote_code: str,
+    base_code: str | None = None,
+    local_code: str | None = None,
+    remote_code: str | None = None,
 ) -> FileConflictASTAnalysis:
     """
     Parse Base, Local, and Remote versions independently and produce
     a complete structural AST conflict analysis and deterministic classification.
     """
-    base_ast = parse_code(path, base_code)
-    local_ast = parse_code(path, local_code)
-    remote_ast = parse_code(path, remote_code)
+    base_ast = parse_code(path, base_code or "")
+    local_ast = parse_code(path, local_code or "")
+    remote_ast = parse_code(path, remote_code or "")
 
     local_changes = compare_ast(base_ast, local_ast)
     remote_changes = compare_ast(base_ast, remote_ast)

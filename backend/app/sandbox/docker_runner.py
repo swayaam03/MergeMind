@@ -141,6 +141,8 @@ class DockerSandboxRunner:
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
                     text=True,
+                    encoding="utf-8",
+                    errors="replace",
                     timeout=4,
                 )
                 if res.returncode == 0 and res.stdout.strip():
@@ -334,6 +336,8 @@ class DockerSandboxRunner:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 timeout=config.timeout_seconds,
             )
             duration = round(time.monotonic() - start_time, 3)

@@ -117,10 +117,16 @@ def run_git_command(
             cwd=str(cwd),
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=timeout,
             env=env,
             check=False,
         )
+        if result.stdout is None:
+            result.stdout = ""
+        if result.stderr is None:
+            result.stderr = ""
     except subprocess.TimeoutExpired as exc:
         raise GitConflictError("Git operation timed out.", status_code=504) from exc
     except FileNotFoundError as exc:
@@ -130,7 +136,7 @@ def run_git_command(
         raise GitConflictError(f"Failed to execute git command: {safe_msg}", status_code=500) from exc
 
     if check and result.returncode != 0:
-        safe_err = sanitize_text(result.stderr.strip() or result.stdout.strip(), secret_tokens)
+        safe_err = sanitize_text((result.stderr or "").strip() or (result.stdout or "").strip(), secret_tokens)
         raise GitConflictError(f"Git command failed: {safe_err}", status_code=500)
 
     return result
@@ -372,9 +378,9 @@ def simulate_merge_and_extract_conflicts(
             local_content_proc = run_git_command(["show", f":2:{file_path}"], cwd=temp_path, secret_tokens=secrets, check=False)
             remote_content_proc = run_git_command(["show", f":3:{file_path}"], cwd=temp_path, secret_tokens=secrets, check=False)
 
-            base_content = base_content_proc.stdout if base_content_proc.returncode == 0 else ""
-            local_content = local_content_proc.stdout if local_content_proc.returncode == 0 else ""
-            remote_content = remote_content_proc.stdout if remote_content_proc.returncode == 0 else ""
+            base_content = (base_content_proc.stdout or "") if base_content_proc.returncode == 0 else ""
+            local_content = (local_content_proc.stdout or "") if local_content_proc.returncode == 0 else ""
+            remote_content = (remote_content_proc.stdout or "") if remote_content_proc.returncode == 0 else ""
 
             # Read working tree file with conflict markers
             working_file = temp_path / file_path

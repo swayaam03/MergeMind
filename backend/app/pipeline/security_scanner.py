@@ -374,9 +374,11 @@ class SemgrepSecurityScanner:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=30,
         )
-        return parse_semgrep_json_output(proc.stdout, rel_path)
+        return parse_semgrep_json_output(proc.stdout or "", rel_path)
 
     def _create_scan_result(
         self,

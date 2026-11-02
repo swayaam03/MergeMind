@@ -442,3 +442,19 @@ def test_api_conflicts_ast_endpoint(
     assert ast_item["language"] == "python"
     assert ast_item["classification"]["category"] == "MODIFY_MODIFY"
     assert ast_item["classification"]["confidence"] == "deterministic"
+
+
+def test_parse_code_and_analyze_with_none_values():
+    """Verify that parse_code and analyze_conflicted_file handle None values without crashing."""
+    ast_res = parse_code("test.py", None)
+    assert ast_res is not None
+    assert ast_res.parse_success is True
+
+    analysis = analyze_conflicted_file(
+        path="test.py",
+        base_code=None,
+        local_code=None,
+        remote_code=None,
+    )
+    assert analysis is not None
+    assert analysis.path == "test.py"

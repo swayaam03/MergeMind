@@ -130,7 +130,7 @@ def _walk_tree(node: Node):
         yield from _walk_tree(child)
 
 
-def parse_code(path: str, source_code: str) -> FileAST:
+def parse_code(path: str, source_code: str | None) -> FileAST:
     """
     Parse source code into structured AST information using Tree-sitter.
 
@@ -139,6 +139,8 @@ def parse_code(path: str, source_code: str) -> FileAST:
     - Handles syntax errors gracefully without crashing.
     - Extracts key structural elements (functions, classes, imports, etc.).
     """
+    if source_code is None:
+        source_code = ""
     language = detect_language(path)
     if language == "unsupported":
         return FileAST(

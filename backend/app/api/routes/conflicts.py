@@ -153,9 +153,9 @@ def get_pull_request_conflicts(
         for c in conflicts:
             ast_res = analyze_conflicted_file(
                 path=c["path"],
-                base_code=c.get("base", ""),
-                local_code=c.get("local", ""),
-                remote_code=c.get("remote", ""),
+                base_code=c.get("base") or "",
+                local_code=c.get("local") or "",
+                remote_code=c.get("remote") or "",
             )
             c["ast_analysis"] = ast_res.model_dump()
 

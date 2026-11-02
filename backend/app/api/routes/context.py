@@ -136,9 +136,9 @@ def get_repository_context(
                         # Reuse Tree-sitter AST analysis
                         ast_res = analyze_conflicted_file(
                             path=cpath,
-                            base_code=c.get("base", ""),
-                            local_code=c.get("local", ""),
-                            remote_code=c.get("remote", ""),
+                            base_code=c.get("base") or "",
+                            local_code=c.get("local") or "",
+                            remote_code=c.get("remote") or "",
                         )
                         ast_analyses[cpath] = ast_res.model_dump()
             except Exception as exc:
